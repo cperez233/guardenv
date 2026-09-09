@@ -49,10 +49,10 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/guardenv/guardenv"
-Repository = "https://github.com/guardenv/guardenv"
-Issues = "https://github.com/guardenv/guardenv/issues"
-Changelog = "https://github.com/guardenv/guardenv/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/cperez233/guardenv"
+Repository = "https://github.com/cperez233/guardenv"
+Issues = "https://github.com/cperez233/guardenv/issues"
+Changelog = "https://github.com/cperez233/guardenv/blob/main/CHANGELOG.md"
 
 [project.scripts]
 guardenv = "guardenv.cli:run"

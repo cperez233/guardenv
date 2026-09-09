@@ -26,7 +26,7 @@ SARIF_SCHEMA = (
     "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json"
 )
 SARIF_VERSION = "2.1.0"
-TOOL_URI = "https://github.com/guardenv/guardenv"
+TOOL_URI = "https://github.com/cperez233/guardenv"
 
 SEVERITY_STYLE: dict[Severity, str] = {
     Severity.CRITICAL: "bold white on red",

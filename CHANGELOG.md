@@ -59,4 +59,4 @@ First stable release.
   holds the GIL, and the benchmark measured thread pools as consistently slower
   (521 files/s serial versus 448 files/s with four threads).
 
-[1.0.0]: https://github.com/guardenv/guardenv/releases/tag/v1.0.0
+[1.0.0]: https://github.com/cperez233/guardenv/releases/tag/v1.0.0

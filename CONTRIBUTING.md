@@ -6,7 +6,7 @@ specific to this project; everything else is ordinary GitHub workflow.
 ## Getting set up
 
 ```bash
-git clone https://github.com/guardenv/guardenv
+git clone https://github.com/cperez233/guardenv
 cd guardenv
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"

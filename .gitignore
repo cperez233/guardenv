@@ -18,6 +18,7 @@ htmlcov/
 web/node_modules/
 web/dist/
 web/.vite/
+web/.vercel/
 web/coverage/
 *.tsbuildinfo
 
