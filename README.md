@@ -6,7 +6,7 @@
 
 A fast, dependency-light secret scanner that pairs deterministic vendor signatures with Shannon entropy analysis — plus a browser playground that runs the same engine entirely offline.
 
-[![Live demo](https://img.shields.io/badge/demo-try_it_in_your_browser-000000?logo=vercel&logoColor=white)](https://guardenv.vercel.app)
+[![Live demo](https://img.shields.io/badge/demo-try_it_in_your_browser-000000?logo=vercel&logoColor=white)](https://web-tau-eight-e80mmlg4bc.vercel.app)
 [![CI](https://github.com/cperez233/guardenv/actions/workflows/ci.yml/badge.svg)](https://github.com/cperez233/guardenv/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/cperez233/guardenv/actions/workflows/codeql.yml/badge.svg)](https://github.com/cperez233/guardenv/actions/workflows/codeql.yml)
 [![Python](https://img.shields.io/badge/python-3.10%20|%203.11%20|%203.12%20|%203.13-3776AB?logo=python&logoColor=white)](https://pypi.org/project/guardenv/)
@@ -161,6 +161,10 @@ guardenv/
 ## The playground
 
 `web/` is a React 18 + TypeScript + Tailwind single-page app that reimplements the engine in TypeScript so it runs with **no backend and no network calls**. Paste a `.env` file or drop one in; findings appear as you type.
+
+**[Open the live playground →](https://web-tau-eight-e80mmlg4bc.vercel.app)**
+
+Or run it locally:
 
 ```bash
 cd web && npm install && npm run dev
