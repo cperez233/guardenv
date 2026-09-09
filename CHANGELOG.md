@@ -1,0 +1,62 @@
+# Changelog
+
+All notable changes to this project are documented here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.0.0] - 2026-09-09
+
+First stable release.
+
+### Added
+
+- **Signature engine** — 48 deterministic rules covering AWS, GCP, Azure,
+  DigitalOcean, GitHub (classic, fine-grained, OAuth and app tokens), GitLab,
+  Stripe, Square, Braintree, OpenAI, Anthropic, Hugging Face, Slack, Discord,
+  Telegram, Twilio, SendGrid, Mailgun, Shopify, npm, PyPI, HashiCorp Vault,
+  Terraform Cloud, Datadog, PEM and PuTTY private keys, JWTs, and connection
+  strings for PostgreSQL, MySQL, MongoDB, Redis, AMQP and HTTP basic auth.
+- **Entropy engine** — Shannon entropy with per-charset thresholds (hex, base64,
+  base64url, alphanumeric, mixed) and ten structural heuristics that suppress
+  UUIDs, ISO timestamps, semver, file paths, hostnames, SRI hashes, CSS colours,
+  numeric literals, word-like identifiers, low-variety strings, repeated runs and
+  documentation placeholders.
+- **Checksum validation** — GitHub tokens are verified against the base62 CRC32
+  they embed, and matching findings are marked `verified`.
+- **Deduplication** — overlapping detections collapse to the most specific one:
+  vendor rule > generic shape rule > entropy.
+- **Scanner** — concurrent-capable traversal with intelligent directory and
+  extension exclusions, a documented `.gitignore` subset, binary sniffing that
+  respects UTF-16/32 BOMs, a five-encoding decode fallback, file-size caps, and
+  per-file error isolation.
+- **CLI** — `scan`, `rules` and `entropy` commands built on Typer with `rich`
+  output, standardised exit codes (`0` clean, `1` secrets, `2` error), stdin
+  support, rule/severity filtering and an adjustable entropy threshold.
+- **Reporters** — `rich` terminal tables, GuardEnv JSON, SARIF 2.1.0 with
+  `security-severity` and `partialFingerprints` for GitHub Code Scanning, and
+  `::error` workflow annotations.
+- **Baselines** — `--write-baseline` / `--baseline` to acknowledge existing
+  findings so CI fails only on new ones.
+- **Playground** — a React 18 + TypeScript + Tailwind single-page app that ports
+  the engine to the browser: split-view editor and audit inspector, a Shannon
+  threshold simulator with a per-token entropy scatter plot, three analysis
+  modes, and JSON/SARIF/Markdown export. Runs fully offline.
+- **Distribution** — a multi-stage Alpine Docker image running as a non-root
+  user, four `.pre-commit-hooks.yaml` hook ids, and a CI matrix across Python
+  3.10-3.12 on Linux plus 3.12 on macOS and Windows.
+
+### Performance
+
+- Replaced the per-rule, per-line keyword prefilter with a two-stage design that
+  tests each unique keyword once per document and re-checks only the survivors
+  per line. Throughput on the benchmark corpus went from 0.7 MB/s to 4.3 MB/s
+  (6x) with no change in detection behaviour.
+- Binary sniffing now counts non-text bytes with `bytes.translate` rather than a
+  Python loop (~15%).
+- Line-offset indexes are built with `itertools.accumulate` and only when a
+  document-scoped rule actually matches.
+- `ScanOptions.workers` now defaults to `1`. Detection is CPU-bound Python that
+  holds the GIL, and the benchmark measured thread pools as consistently slower
+  (521 files/s serial versus 448 files/s with four threads).
+
+[1.0.0]: https://github.com/guardenv/guardenv/releases/tag/v1.0.0

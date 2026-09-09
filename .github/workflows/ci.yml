@@ -1,0 +1,205 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUNBUFFERED: "1"
+  FORCE_COLOR: "1"
+
+jobs:
+  lint:
+    name: Lint & type-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install
+        run: python -m pip install --upgrade pip && pip install -e ".[dev]"
+
+      - name: Ruff (lint)
+        run: ruff check --output-format=github .
+
+      - name: Ruff (format check)
+        run: ruff format --check .
+
+      - name: Mypy (strict)
+        run: mypy
+
+  test:
+    name: Tests · Python ${{ matrix.python-version }} · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+        os: [ubuntu-latest]
+        include:
+          - python-version: "3.12"
+            os: macos-latest
+          - python-version: "3.12"
+            os: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install
+        run: python -m pip install --upgrade pip && pip install -e ".[dev]"
+
+      - name: Run test suite
+        run: pytest --cov=guardenv --cov-branch --cov-report=xml --cov-report=term-missing
+
+      - name: Enforce coverage floor
+        if: matrix.python-version == '3.12' && matrix.os == 'ubuntu-latest'
+        run: coverage report --fail-under=90
+
+      - name: Upload coverage
+        if: matrix.python-version == '3.12' && matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          if-no-files-found: error
+
+  self-scan:
+    name: GuardEnv scans itself
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install
+        run: python -m pip install --upgrade pip && pip install -e .
+
+      - name: Scan the working tree
+        # These paths carry deliberately synthetic, non-functional credentials:
+        # the demo tree, both test suites, the playground's sample documents and
+        # the benchmark corpus generator.
+        run: |
+          guardenv scan . \
+            --no-banner \
+            --exclude 'examples/*' \
+            --exclude 'tests/*' \
+            --exclude 'web/src/lib/samples.ts' \
+            --exclude 'web/src/engine/engine.test.ts' \
+            --exclude 'scripts/benchmark.py' \
+            --sarif \
+            --output guardenv.sarif
+        continue-on-error: true
+
+      - name: Fail if GuardEnv finds a secret in its own source
+        run: |
+          guardenv scan . \
+            --no-banner --quiet \
+            --exclude 'examples/*' \
+            --exclude 'tests/*' \
+            --exclude 'web/src/lib/samples.ts' \
+            --exclude 'web/src/engine/engine.test.ts' \
+            --exclude 'scripts/benchmark.py' \
+            --fail-on MEDIUM
+
+      - name: Upload SARIF to Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: guardenv.sarif
+          category: guardenv
+
+      - name: Verify the fixtures are still detected
+        # A regression that silently stops detecting secrets must fail the build,
+        # so assert the known-bad fixture tree still produces findings.
+        run: |
+          set +e
+          guardenv scan examples --no-banner --quiet
+          status=$?
+          set -e
+          if [ "$status" -ne 1 ]; then
+            echo "::error::expected exit code 1 on the fixture tree, got $status"
+            exit 1
+          fi
+
+  web:
+    name: Playground · build & type-check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install
+        run: npm ci || npm install
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test -- --run
+
+      - name: Build
+        run: npm run build
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: guardenv:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke-test the image
+        run: |
+          docker run --rm guardenv:ci --version
+          docker run --rm -v "$PWD/examples:/workspace:ro" guardenv:ci scan . --no-banner --quiet \
+            && { echo "::error::expected findings in the fixture tree"; exit 1; } \
+            || echo "fixtures detected as expected"

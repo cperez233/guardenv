@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Node / web playground
+web/node_modules/
+web/dist/
+web/.vite/
+web/coverage/
+*.tsbuildinfo
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+
+# GuardEnv output
+guardenv-report.json
+guardenv.sarif
+.guardenv-baseline.json
+
+# Never commit real secrets
+.env
+.env.local
+.env.*.local
+!examples/*.env
+!tests/**/*.env

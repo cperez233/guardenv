@@ -1,0 +1,38 @@
+- id: guardenv
+  name: GuardEnv secret scan
+  description: Block commits that contain credentials, tokens or private keys.
+  entry: guardenv scan
+  args: ["--no-banner", "--fail-on", "MEDIUM"]
+  language: python
+  types: [text]
+  pass_filenames: true
+  require_serial: false
+
+- id: guardenv-strict
+  name: GuardEnv secret scan (strict)
+  description: Same as `guardenv`, but any finding - including INFO - blocks the commit.
+  entry: guardenv scan
+  args: ["--no-banner", "--fail-on-warning"]
+  language: python
+  types: [text]
+  pass_filenames: true
+  require_serial: false
+
+- id: guardenv-baseline
+  name: GuardEnv secret scan (baseline)
+  description: Fail only on findings that are absent from .guardenv-baseline.json.
+  entry: guardenv scan
+  args: ["--no-banner", "--baseline", ".guardenv-baseline.json"]
+  language: python
+  types: [text]
+  pass_filenames: true
+  require_serial: false
+
+- id: guardenv-repo
+  name: GuardEnv full repository scan
+  description: Scan the whole working tree instead of just the staged files.
+  entry: guardenv scan .
+  args: ["--no-banner", "--fail-on", "HIGH"]
+  language: python
+  pass_filenames: false
+  always_run: true
