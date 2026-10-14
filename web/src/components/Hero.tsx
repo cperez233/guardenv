@@ -3,6 +3,8 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useCallback, useRef, useState } from "react";
 import type { ReactElement } from "react";
 
+import { riskScore } from "@/engine/risk";
+import type { RiskGrade } from "@/engine/risk";
 import { SEVERITY_LEVELS } from "@/engine/types";
 import type { ScanSummary } from "@/engine/types";
 import { SEVERITY_CLASSES, cx, pluralize } from "@/lib/format";
@@ -99,6 +101,44 @@ function Wordmark(): ReactElement {
   );
 }
 
+const GRADE_TONE: Readonly<Record<RiskGrade, string>> = {
+  A: "border-severity-clean text-severity-clean",
+  B: "border-severity-clean text-severity-clean",
+  C: "border-severity-medium text-severity-medium",
+  D: "border-severity-high text-severity-high",
+  F: "border-severity-critical text-severity-critical",
+};
+
+/** The exposure grade, pressed on the card like an examiner's mark. */
+function GradeMark({ summary, hasInput }: { summary: ScanSummary; hasInput: boolean }): ReactElement {
+  const { score, grade } = riskScore(summary);
+  return (
+    <div className="flex items-center gap-2.5" title="Exposure grade: every finding costs points by severity; verified tokens cost more">
+      <div className="text-right leading-tight">
+        <div className="text-[12px] font-semibold text-content-tertiary">Risk grade</div>
+        <div className="font-mono text-[12px] text-content-tertiary">{hasInput ? `${score}/100` : "—"}</div>
+      </div>
+      <span className="relative grid h-12 w-12 shrink-0 place-items-center" aria-label={hasInput ? `Risk grade ${grade}, ${score} out of 100` : "No grade"}>
+        <AnimatePresence mode="popLayout" initial={false}>
+          <motion.span
+            key={hasInput ? grade : "none"}
+            initial={{ rotateX: -90, opacity: 0, scale: 1.25 }}
+            animate={{ rotateX: 0, opacity: 1, scale: 1 }}
+            exit={{ rotateX: 90, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 420, damping: 24 }}
+            className={cx(
+              "grid h-12 w-12 place-items-center rounded-[6px] border-[3px] font-display text-[28px] font-[900] leading-none [font-stretch:110%]",
+              hasInput ? GRADE_TONE[grade] : "border-hairline text-content-faint",
+            )}
+          >
+            {hasInput ? grade : "–"}
+          </motion.span>
+        </AnimatePresence>
+      </span>
+    </div>
+  );
+}
+
 function Verdict({ summary, hasInput, filename }: HeroProps): ReactElement {
   const total = summary.totalFindings;
   const clean = hasInput && total === 0;
@@ -120,6 +160,7 @@ function Verdict({ summary, hasInput, filename }: HeroProps): ReactElement {
       </div>
 
       <div className="mt-3 flex items-end gap-3">
+
         <span
           className={cx(
             "font-display text-[clamp(4rem,14vw,5.5rem)] font-[850] leading-[0.85] tracking-[-0.04em] [font-stretch:110%]",
@@ -154,6 +195,9 @@ function Verdict({ summary, hasInput, filename }: HeroProps): ReactElement {
             </motion.span>
           )}
         </AnimatePresence>
+        <div className="ml-auto pb-1">
+          <GradeMark summary={summary} hasInput={hasInput} />
+        </div>
       </div>
 
       {/* Severity strip: one segment per level, sized by its count. */}

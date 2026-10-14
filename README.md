@@ -174,6 +174,13 @@ cd web && npm install && npm run dev
 - **Entropy simulator** — a slider over the Shannon threshold (3.0 → 6.0) with a scatter plot of every candidate token in the document. Tokens above the line are flagged; tokens drawn with a dashed outline cleared the threshold but were dropped by a heuristic, so you can see *why* something was not reported.
 - **Analysis modes** — signatures only, entropy only, or both.
 - **Export** — copy or download the report as GuardEnv JSON or SARIF 2.1.0, byte-compatible with what the CLI emits.
+- **Encoded secrets** — base64 values (Kubernetes Secrets, Docker auth, "obfuscated" constants) are decoded and scanned too, and reported at the position of the encoded value. A playground-only pass, switchable from the inspector.
+- **Risk grade** — an A–F exposure grade per document; any CRITICAL caps it at D, any HIGH at C, and checksum-verified tokens cost extra.
+- **How to fix** — selecting a finding opens provider-specific revocation steps and a link to the console where the key is rotated.
+- **Redact** — black out every reported credential in place (same length, columns intact) to share a safe copy; one click to undo.
+- **False positives → baseline** — mark findings as false positives and download a `.guardenv-baseline.json` whose ids are computed exactly like the CLI's, so `--baseline` honours them in CI.
+- **Protect** — generated `.gitignore`, a `.env.example` with secret values emptied, and the pre-commit and GitHub Actions snippets.
+- **Keyboard** — `J` / `K` step through findings, `Esc` clears the selection.
 
 ### Deployment
 

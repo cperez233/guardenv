@@ -104,6 +104,28 @@ const MIXED_CONFIG = `{
 }
 `;
 
+/**
+ * The values are encoded at load time from the synthetic credentials above, so
+ * no encoded copy of a key-shaped string ever sits in the source tree (GitHub
+ * push protection decodes base64 too).
+ */
+const b64 = (value: string): string => btoa(value);
+
+const K8S_SECRET = `# Kubernetes Secret: base64 is an encoding, not encryption.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: billing-service
+  namespace: payments
+type: Opaque
+data:
+  SERVICE_NAME: ${b64("billing-service")}
+  AWS_REGION: ${b64("eu-west-1")}
+  AWS_ACCESS_KEY_ID: ${b64(LEAKY_ENV.match(/AKIA[0-9A-Z]{16}/)?.[0] ?? "")}
+  STRIPE_SECRET_KEY: ${b64(LEAKY_ENV.match(/sk_live_[0-9A-Za-z]+/)?.[0] ?? "")}
+  DATABASE_URL: ${b64(LEAKY_ENV.match(/postgresql:\/\/\S+/)?.[0] ?? "")}
+`;
+
 export const SAMPLE_DOCUMENTS: readonly SampleDocument[] = [
   {
     id: "env",
@@ -125,6 +147,13 @@ export const SAMPLE_DOCUMENTS: readonly SampleDocument[] = [
     filename: "config.json",
     description: "A JSON config mixing real credentials with benign hashes and UUIDs.",
     content: MIXED_CONFIG,
+  },
+  {
+    id: "k8s",
+    label: "secret.yaml",
+    filename: "secret.yaml",
+    description: "A Kubernetes Secret whose credentials are only base64-encoded.",
+    content: K8S_SECRET,
   },
   {
     id: "clean",

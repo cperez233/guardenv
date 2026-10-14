@@ -9,7 +9,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { findEncodedSecrets, mergeEncoded } from "@/engine/decode";
 import { scanText } from "@/engine/scanner";
+import { withFindings } from "@/engine/summary";
 import { EMPTY_SUMMARY, type ScanSummary, type SeverityLevel } from "@/engine/types";
 
 export type AnalysisMode = "combined" | "rules" | "entropy";
@@ -21,6 +23,7 @@ export interface ScannerState {
   readonly mode: AnalysisMode;
   readonly useHeuristics: boolean;
   readonly minSeverity: SeverityLevel;
+  readonly decodeEncoded: boolean;
 }
 
 export interface ScannerApi extends ScannerState {
@@ -32,6 +35,7 @@ export interface ScannerApi extends ScannerState {
   setMode: (value: AnalysisMode) => void;
   setUseHeuristics: (value: boolean) => void;
   setMinSeverity: (value: SeverityLevel) => void;
+  setDecodeEncoded: (value: boolean) => void;
   loadSample: (content: string, filename: string) => void;
   clear: () => void;
 }
@@ -51,6 +55,8 @@ export function useScanner(options: UseScannerOptions): ScannerApi {
   const [mode, setMode] = useState<AnalysisMode>("combined");
   const [useHeuristics, setUseHeuristics] = useState(true);
   const [minSeverity, setMinSeverity] = useState<SeverityLevel>("INFO");
+  // Decode base64 values and scan the plaintext too (a playground-only pass).
+  const [decodeEncoded, setDecodeEncoded] = useState(true);
 
   // `debounced` trails `source`; every other input applies immediately because
   // moving the slider should feel like a live control, not a delayed one.
@@ -73,7 +79,7 @@ export function useScanner(options: UseScannerOptions): ScannerApi {
 
   const summary = useMemo<ScanSummary>(() => {
     if (debounced.trim().length === 0) return EMPTY_SUMMARY;
-    return scanText(debounced, {
+    const base = scanText(debounced, {
       path: filename,
       entropyThreshold: threshold,
       enableRules: mode !== "entropy",
@@ -81,7 +87,10 @@ export function useScanner(options: UseScannerOptions): ScannerApi {
       useHeuristics,
       minSeverity,
     });
-  }, [debounced, filename, threshold, mode, useHeuristics, minSeverity]);
+    if (!decodeEncoded || mode === "entropy") return base;
+    const encoded = findEncodedSecrets(debounced, filename, minSeverity);
+    return encoded.length === 0 ? base : withFindings(base, mergeEncoded(base.findings, encoded));
+  }, [debounced, filename, threshold, mode, useHeuristics, minSeverity, decodeEncoded]);
 
   const loadSample = useCallback((content: string, name: string) => {
     window.clearTimeout(timer.current);
@@ -105,6 +114,7 @@ export function useScanner(options: UseScannerOptions): ScannerApi {
     mode,
     useHeuristics,
     minSeverity,
+    decodeEncoded,
     summary,
     isScanning,
     setSource,
@@ -113,6 +123,7 @@ export function useScanner(options: UseScannerOptions): ScannerApi {
     setMode,
     setUseHeuristics,
     setMinSeverity,
+    setDecodeEncoded,
     loadSample,
     clear,
   };

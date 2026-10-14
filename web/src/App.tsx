@@ -1,6 +1,6 @@
 /* editorial-ui · Cristian Pérez · cristianperez.me */
 import { MotionConfig, motion } from "framer-motion";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactElement } from "react";
 
 import { EditorPanel } from "@/components/EditorPanel";
@@ -8,7 +8,9 @@ import { EntropySimulator } from "@/components/EntropySimulator";
 import { Header } from "@/components/Header";
 import { Hero } from "@/components/Hero";
 import { InspectorPanel } from "@/components/InspectorPanel";
+import { ProtectPanel } from "@/components/ProtectPanel";
 import { redactDocument } from "@/engine/redact";
+import { withFindings } from "@/engine/summary";
 import type { ScanFinding } from "@/engine/types";
 import { useScanner } from "@/hooks/useScanner";
 import { ease } from "@/lib/motion";
@@ -38,6 +40,27 @@ export default function App(): ReactElement {
 
   const hasInput = scanner.source.trim().length > 0;
 
+  // Findings acknowledged as false positives: hidden everywhere, kept for the baseline.
+  const [ignoredIds, setIgnoredIds] = useState<ReadonlySet<string>>(() => new Set());
+  const { summary: rawSummary } = scanner;
+  const ignored = useMemo(
+    () => rawSummary.findings.filter((finding) => ignoredIds.has(finding.id)),
+    [rawSummary, ignoredIds],
+  );
+  const summary = useMemo(
+    () =>
+      ignored.length === 0
+        ? rawSummary
+        : withFindings(rawSummary, rawSummary.findings.filter((finding) => !ignoredIds.has(finding.id))),
+    [rawSummary, ignored, ignoredIds],
+  );
+
+  const ignoreFinding = useCallback((finding: ScanFinding) => {
+    setActiveFinding(null);
+    setActiveLine(null);
+    setIgnoredIds((current) => new Set(current).add(finding.id));
+  }, []);
+
   // The last redaction, kept so it can be undone until the text is edited.
   const [redaction, setRedaction] = useState<{ count: number; previous: string } | null>(null);
 
@@ -50,13 +73,13 @@ export default function App(): ReactElement {
   );
 
   const redact = useCallback(() => {
-    const { text, count } = redactDocument(scanner.source, scanner.summary.findings);
+    const { text, count } = redactDocument(scanner.source, summary.findings);
     if (count === 0) return;
     setActiveFinding(null);
     setActiveLine(null);
     setRedaction({ count, previous: scanner.source });
     scanner.loadSample(text, scanner.filename);
-  }, [scanner]);
+  }, [scanner, summary]);
 
   const undoRedaction = useCallback(() => {
     if (redaction === null) return;
@@ -65,7 +88,7 @@ export default function App(): ReactElement {
   }, [redaction, scanner]);
 
   // J / K step through the findings, Esc clears the selection. Typing is never hijacked.
-  const findings = scanner.summary.findings;
+  const findings = summary.findings;
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
@@ -97,7 +120,7 @@ export default function App(): ReactElement {
     <MotionConfig reducedMotion="user">
       <div className="min-h-screen text-content-primary">
         <Header
-          summary={scanner.summary}
+          summary={summary}
           mode={scanner.mode}
           isScanning={scanner.isScanning}
           hasInput={hasInput}
@@ -105,14 +128,14 @@ export default function App(): ReactElement {
           repositoryUrl={REPOSITORY_URL}
         />
 
-        <Hero summary={scanner.summary} hasInput={hasInput} filename={scanner.filename} />
+        <Hero summary={summary} hasInput={hasInput} filename={scanner.filename} />
 
         <main className="mx-auto flex max-w-[1600px] flex-col gap-5 px-4 pb-4 sm:px-6 lg:gap-6 lg:px-10">
           <div className="grid gap-5 lg:gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
             <EditorPanel
               source={scanner.source}
               filename={scanner.filename}
-              findings={scanner.summary.findings}
+              findings={summary.findings}
               activeLine={activeLine}
               onSourceChange={editSource}
               onFilenameChange={scanner.setFilename}
@@ -128,30 +151,37 @@ export default function App(): ReactElement {
                 setRedaction(null);
                 scanner.clear();
               }}
-              canRedact={!scanner.isScanning && scanner.summary.findings.length > 0}
+              canRedact={!scanner.isScanning && summary.findings.length > 0}
               onRedact={redact}
               redaction={redaction}
               onUndoRedaction={undoRedaction}
             />
 
             <InspectorPanel
-              summary={scanner.summary}
+              summary={summary}
               hasInput={hasInput}
               minSeverity={scanner.minSeverity}
               activeFindingId={activeFinding?.id ?? null}
               onMinSeverityChange={scanner.setMinSeverity}
               onSelectFinding={selectFinding}
+              decodeEncoded={scanner.decodeEncoded}
+              onDecodeEncodedChange={scanner.setDecodeEncoded}
+              ignored={ignored}
+              onIgnore={ignoreFinding}
+              onRestoreIgnored={() => { setIgnoredIds(new Set()); }}
             />
           </div>
 
           <EntropySimulator
-            profile={scanner.summary.entropyProfile}
+            profile={summary.entropyProfile}
             threshold={scanner.threshold}
             useHeuristics={scanner.useHeuristics}
             onThresholdChange={scanner.setThreshold}
             onHeuristicsChange={scanner.setUseHeuristics}
             onSelectToken={selectLine}
           />
+
+          <ProtectPanel source={scanner.source} filename={scanner.filename} findings={summary.findings} />
 
           <footer className="mt-6 border-t border-hairline pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-8 sm:mt-10 sm:pt-10">
             <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">

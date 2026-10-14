@@ -2,6 +2,13 @@
 import { AnimatePresence, motion } from "framer-motion";
 import {
   BadgeCheck,
+  BellOff,
+  Binary,
+  ChevronDown,
+  ExternalLink,
+  FileCheck2,
+  RotateCcw,
+  Wrench,
   Braces,
   Check,
   ClipboardCopy,
@@ -13,7 +20,9 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import type { ReactElement } from "react";
 
+import { buildBaseline } from "@/engine/baseline";
 import { buildReport, downloadReport, toMarkdownReport } from "@/engine/export";
+import { remediationFor } from "@/engine/remediation";
 import type { ExportFormat } from "@/engine/export";
 import { SEVERITY_LEVELS } from "@/engine/types";
 import type { ScanFinding, ScanSummary, SeverityLevel } from "@/engine/types";
@@ -31,6 +40,12 @@ interface InspectorPanelProps {
   readonly activeFindingId: string | null;
   readonly onMinSeverityChange: (severity: SeverityLevel) => void;
   readonly onSelectFinding: (finding: ScanFinding) => void;
+  readonly decodeEncoded: boolean;
+  readonly onDecodeEncodedChange: (value: boolean) => void;
+  /** Findings acknowledged as false positives, hidden from the list above. */
+  readonly ignored: readonly ScanFinding[];
+  readonly onIgnore: (finding: ScanFinding) => void;
+  readonly onRestoreIgnored: () => void;
 }
 
 function FindingRow({
@@ -38,43 +53,57 @@ function FindingRow({
   index,
   isActive,
   onSelect,
+  onIgnore,
 }: {
   finding: ScanFinding;
   index: number;
   isActive: boolean;
   onSelect: () => void;
+  onIgnore: () => void;
 }): ReactElement {
   const classes = SEVERITY_CLASSES[finding.severity];
+  const fix = remediationFor(finding);
+  const encoded = finding.tags.includes("encoded");
   return (
     <motion.li
       layout="position"
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, x: -16, transition: { duration: 0.18 } }}
+      exit={{ opacity: 0, x: 40, transition: { duration: 0.22, ease } }}
       transition={{ duration: 0.45, delay: Math.min(index * 0.05, 0.4), ease }}
-      className="border-b border-hairline last:border-b-0"
+      className={cx("relative border-b border-hairline last:border-b-0", isActive && "bg-mark/25")}
     >
+      {/* Severity tab on the left edge; it grows into an ink bar when selected. */}
+      <span
+        aria-hidden
+        className={cx(
+          "pointer-events-none absolute left-0 top-3 z-[1] w-[3px] rounded-r-sm transition-all duration-300",
+          isActive ? "bottom-3 w-[5px] bg-ink" : cx("bottom-[calc(100%-2.25rem)]", classes.dot),
+        )}
+      />
       <button
         type="button"
         id={`finding-${finding.id}`}
         onClick={onSelect}
         aria-current={isActive}
+        aria-expanded={isActive}
         className={cx(
           "group relative w-full px-4 py-3.5 text-left transition-colors duration-200 active:bg-surface-3 sm:px-5",
-          isActive ? "bg-mark/40" : "hover:bg-surface-2",
+          isActive ? "bg-mark/20" : "hover:bg-surface-2",
         )}
       >
-        {/* Severity tab on the left edge; it grows into an ink bar when selected. */}
-        <span
-          aria-hidden
-          className={cx(
-            "absolute left-0 top-3 w-[3px] rounded-r-sm transition-all duration-300",
-            isActive ? "bottom-3 w-[5px] bg-ink" : cx("bottom-[calc(100%-2.25rem)]", classes.dot),
-          )}
-        />
         <div className="flex flex-wrap items-center gap-2">
           <SeverityBadge severity={finding.severity} size="sm" />
           <code className="min-w-0 break-all font-mono text-[14px] font-bold text-content-primary">{finding.ruleId}</code>
+          {encoded && (
+            <span
+              title="Found by decoding a base64 value"
+              className="inline-flex shrink-0 items-center gap-1 rounded bg-ink px-1.5 py-0.5 font-mono text-[11px] font-bold text-mark"
+            >
+              <Binary className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              base64
+            </span>
+          )}
           {finding.verified && (
             <span
               title="Checksum verified against the provider's token format"
@@ -94,6 +123,10 @@ function FindingRow({
               <Regex className="h-3.5 w-3.5 shrink-0" aria-hidden />
             )}
             {formatEntropy(finding.entropy)}
+            <ChevronDown
+              className={cx("ml-1 h-4 w-4 shrink-0 transition-transform duration-300", isActive && "rotate-180")}
+              aria-hidden
+            />
           </span>
         </div>
 
@@ -115,6 +148,72 @@ function FindingRow({
           </pre>
         )}
       </button>
+
+      {/* The fix: opens under the selected finding. */}
+      <AnimatePresence initial={false}>
+        {isActive && (
+          <motion.div
+            key="fix"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.32, ease }}
+            className="overflow-hidden"
+          >
+            <div className="px-4 pb-4 sm:px-5">
+              <div className="rounded-lg bg-surface-1 p-3.5 shadow-rest ring-1 ring-hairline sm:p-4">
+                <p className="flex items-center gap-2 text-[13px] font-bold text-content-primary">
+                  <Wrench className="h-4 w-4 shrink-0" aria-hidden />
+                  How to fix
+                </p>
+                <ol className="mt-2.5 flex flex-col gap-2 text-[14px] leading-snug text-content-secondary">
+                  {[fix.revoke, ...fix.steps].map((step, stepIndex) => (
+                    <motion.li
+                      key={step}
+                      initial={{ opacity: 0, x: -8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.3, delay: 0.08 + stepIndex * 0.06, ease }}
+                      className="flex gap-2.5"
+                    >
+                      <span
+                        className={cx(
+                          "mt-[1px] grid h-5 w-5 shrink-0 place-items-center rounded-[4px] font-mono text-[11px] font-bold",
+                          stepIndex === 0 ? "bg-ink text-mark" : "bg-surface-3 text-content-secondary",
+                        )}
+                      >
+                        {stepIndex + 1}
+                      </span>
+                      <span className={cx(stepIndex === 0 && "font-semibold text-content-primary")}>{step}</span>
+                    </motion.li>
+                  ))}
+                </ol>
+                <div className="mt-3.5 flex flex-wrap items-center gap-2">
+                  {fix.console !== undefined && (
+                    <a
+                      href={fix.console.href}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="hit inline-flex items-center gap-1.5 rounded-md bg-ink px-3 py-1.5 text-[13px] font-semibold text-surface-1 transition-[transform,background-color] duration-150 hover:bg-ink-soft active:scale-[0.96]"
+                    >
+                      {fix.console.label}
+                      <ExternalLink className="h-3.5 w-3.5 shrink-0 text-mark" aria-hidden />
+                    </a>
+                  )}
+                  <button
+                    type="button"
+                    onClick={onIgnore}
+                    title="Hide it here and add it to the baseline you can download"
+                    className="hit inline-flex items-center gap-1.5 rounded-md border border-hairline bg-surface-1 px-3 py-1.5 text-[13px] font-medium text-content-secondary transition-[color,border-color,transform] duration-150 hover:border-hairline-strong hover:text-content-primary active:scale-[0.96]"
+                  >
+                    <BellOff className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    Mark as false positive
+                  </button>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.li>
   );
 }
@@ -143,7 +242,27 @@ export function InspectorPanel({
   activeFindingId,
   onMinSeverityChange,
   onSelectFinding,
+  decodeEncoded,
+  onDecodeEncodedChange,
+  ignored,
+  onIgnore,
+  onRestoreIgnored,
 }: InspectorPanelProps): ReactElement {
+  const [baselineError, setBaselineError] = useState<string | null>(null);
+
+  const downloadBaseline = (): void => {
+    setBaselineError(null);
+    buildBaseline(ignored)
+      .then((text) => {
+        const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = ".guardenv-baseline.json";
+        link.click();
+        window.setTimeout(() => { URL.revokeObjectURL(url); }, 1000);
+      })
+      .catch(() => { setBaselineError("This browser cannot compute the baseline (needs a secure context)."); });
+  };
   const [format, setFormat] = useState<ExportFormat>("json");
   const { state: copyState, copy } = useCopyToClipboard();
   const { state: mdCopyState, copy: copyMarkdown } = useCopyToClipboard();
@@ -189,7 +308,33 @@ export function InspectorPanel({
             step through
           </span>
         )}
-        <label className="ml-auto flex items-center gap-2 text-[13px] font-medium text-content-tertiary">
+        <label
+          className="ml-auto flex cursor-pointer select-none items-center gap-2 text-[13px] font-medium text-content-tertiary"
+          title="Decode base64 values and scan what is inside them"
+        >
+          <input
+            type="checkbox"
+            checked={decodeEncoded}
+            onChange={(event) => { onDecodeEncodedChange(event.target.checked); }}
+            className="peer sr-only"
+          />
+          <span
+            aria-hidden
+            className={cx(
+              "relative h-5 w-8 shrink-0 rounded-full transition-colors duration-200 peer-focus-visible:ring-2 peer-focus-visible:ring-ink peer-focus-visible:ring-offset-2",
+              decodeEncoded ? "bg-ink" : "bg-surface-4",
+            )}
+          >
+            <motion.span
+              initial={false}
+              animate={{ x: decodeEncoded ? 14 : 2 }}
+              transition={{ type: "spring", stiffness: 600, damping: 34 }}
+              className={cx("absolute top-[3px] h-[14px] w-[14px] rounded-full", decodeEncoded ? "bg-mark" : "bg-surface-1")}
+            />
+          </span>
+          Decode base64
+        </label>
+        <label className="flex items-center gap-2 text-[13px] font-medium text-content-tertiary">
           Min severity
           <select
             value={minSeverity}
@@ -294,6 +439,7 @@ export function InspectorPanel({
                     index={index}
                     isActive={activeFindingId === finding.id}
                     onSelect={() => { onSelectFinding(finding); }}
+                    onIgnore={() => { onIgnore(finding); }}
                   />
                 ))}
               </AnimatePresence>
@@ -301,6 +447,40 @@ export function InspectorPanel({
           )}
         </AnimatePresence>
       </div>
+
+      <AnimatePresence initial={false}>
+        {ignored.length > 0 && (
+          <motion.div
+            key="ignored"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.28, ease }}
+            className="overflow-hidden border-t border-hairline"
+          >
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 sm:px-5">
+              <span className="min-w-0 flex-1 text-[13px] text-content-secondary">
+                <RollingNumber value={ignored.length} className="align-bottom font-bold" /> marked as false{" "}
+                {ignored.length === 1 ? "positive" : "positives"}
+                {baselineError !== null && <span className="block text-severity-critical">{baselineError}</span>}
+              </span>
+              <button type="button" onClick={onRestoreIgnored} className={secondaryButton}>
+                <RotateCcw className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                Restore
+              </button>
+              <button
+                type="button"
+                onClick={downloadBaseline}
+                title="A .guardenv-baseline.json the CLI accepts with --baseline (name the file with its path in the repo)"
+                className={secondaryButton}
+              >
+                <FileCheck2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                Baseline
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="flex flex-wrap items-center gap-2 border-t border-hairline bg-surface-2/60 px-4 py-3 sm:px-5">
         <div
