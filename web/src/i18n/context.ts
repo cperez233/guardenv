@@ -11,7 +11,20 @@ export type Lang = "en" | "es";
 
 export const LANG_STORAGE_KEY = "guardenv-lang";
 
+/** The Spanish entry page lives at /es (its own share image and metadata). */
+export function langFromPath(pathname: string): Lang | null {
+  return pathname === "/es" || pathname.startsWith("/es/") ? "es" : null;
+}
+
+/** The path that matches a language, so a copied link previews in that language. */
+export function pathForLang(lang: Lang): string {
+  return lang === "es" ? "/es" : "/";
+}
+
 export function detectLang(): Lang {
+  // An explicit /es link wins over a remembered choice.
+  const fromPath = langFromPath(window.location.pathname);
+  if (fromPath !== null) return fromPath;
   try {
     const saved = localStorage.getItem(LANG_STORAGE_KEY);
     if (saved === "en" || saved === "es") return saved;

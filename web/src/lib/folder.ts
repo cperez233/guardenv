@@ -15,7 +15,11 @@ export interface FolderRead {
   readonly capped: boolean;
 }
 
-export const MAX_FOLDER_FILES = 400;
+export const MAX_FOLDER_FILES = 2000;
+/** Files read at once: enough to keep the disk busy, few enough to stay responsive. */
+const READ_BATCH = 24;
+
+export type Progress = (read: number) => void;
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const SKIP_DIRS = new Set([
   "node_modules", ".git", "dist", "build", ".next", ".nuxt", ".venv", "venv", "__pycache__",
@@ -36,9 +40,37 @@ async function readText(file: File): Promise<string | null> {
   return text.slice(0, 8192).includes("\u0000") ? null : text;
 }
 
-/** Files picked through `<input webkitdirectory>`. */
-export async function readPickedFiles(list: FileList): Promise<FolderRead> {
+/** Read candidate files in parallel batches, reporting progress after each batch. */
+async function readAll(
+  candidates: readonly { path: string; load: () => Promise<File> }[],
+  onProgress: Progress | undefined,
+): Promise<{ files: FolderFile[]; unreadable: number }> {
   const files: FolderFile[] = [];
+  let unreadable = 0;
+  for (let start = 0; start < candidates.length; start += READ_BATCH) {
+    const batch = candidates.slice(start, start + READ_BATCH);
+    const texts = await Promise.all(
+      batch.map(async (candidate) => {
+        try {
+          return await readText(await candidate.load());
+        } catch {
+          return null;
+        }
+      }),
+    );
+    texts.forEach((content, index) => {
+      const candidate = batch[index];
+      if (content === null || candidate === undefined) unreadable += 1;
+      else files.push({ path: candidate.path, content });
+    });
+    onProgress?.(Math.min(start + READ_BATCH, candidates.length));
+  }
+  return { files, unreadable };
+}
+
+/** Files picked through `<input webkitdirectory>`. */
+export async function readPickedFiles(list: FileList, onProgress?: Progress): Promise<FolderRead> {
+  const candidates: { path: string; load: () => Promise<File> }[] = [];
   let skipped = 0;
   let capped = false;
   for (const file of Array.from(list)) {
@@ -47,15 +79,14 @@ export async function readPickedFiles(list: FileList): Promise<FolderRead> {
       skipped += 1;
       continue;
     }
-    if (files.length >= MAX_FOLDER_FILES) {
+    if (candidates.length >= MAX_FOLDER_FILES) {
       capped = true;
       break;
     }
-    const content = await readText(file);
-    if (content === null) skipped += 1;
-    else files.push({ path, content });
+    candidates.push({ path, load: () => Promise.resolve(file) });
   }
-  return { files, skipped, capped };
+  const { files, unreadable } = await readAll(candidates, onProgress);
+  return { files, skipped: skipped + unreadable, capped };
 }
 
 function entryFile(entry: FileSystemFileEntry): Promise<File> {
@@ -80,13 +111,13 @@ function entryChildren(entry: FileSystemDirectoryEntry): Promise<FileSystemEntry
 }
 
 /** A drop that contains a directory; returns null when it is a plain file drop. */
-export async function readDroppedFolder(items: DataTransferItemList): Promise<FolderRead | null> {
+export async function readDroppedFolder(items: DataTransferItemList, onProgress?: Progress): Promise<FolderRead | null> {
   const roots = Array.from(items)
     .map((item) => item.webkitGetAsEntry())
     .filter((entry): entry is FileSystemEntry => entry !== null);
   if (!roots.some((entry) => entry.isDirectory)) return null;
 
-  const files: FolderFile[] = [];
+  const candidates: { path: string; load: () => Promise<File> }[] = [];
   let skipped = 0;
   let capped = false;
   const walk = async (entry: FileSystemEntry, prefix: string): Promise<void> => {
@@ -104,14 +135,13 @@ export async function readDroppedFolder(items: DataTransferItemList): Promise<Fo
       skipped += 1;
       return;
     }
-    if (files.length >= MAX_FOLDER_FILES) {
+    if (candidates.length >= MAX_FOLDER_FILES) {
       capped = true;
       return;
     }
-    const content = await readText(await entryFile(entry as FileSystemFileEntry));
-    if (content === null) skipped += 1;
-    else files.push({ path, content });
+    candidates.push({ path, load: () => entryFile(entry as FileSystemFileEntry) });
   };
   for (const root of roots) await walk(root, "");
-  return { files, skipped, capped };
+  const { files, unreadable } = await readAll(candidates, onProgress);
+  return { files, skipped: skipped + unreadable, capped };
 }

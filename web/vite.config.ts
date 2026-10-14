@@ -16,6 +16,14 @@ export default defineConfig({
     outDir: "dist",
     sourcemap: true,
     target: "es2022",
+    // Two entry pages: the same app, with English and Spanish share metadata,
+    // because link previews are read from the HTML, not from the running app.
+    rollupOptions: {
+      input: {
+        main: fileURLToPath(new URL("./index.html", import.meta.url)),
+        es: fileURLToPath(new URL("./es/index.html", import.meta.url)),
+      },
+    },
   },
   test: {
     environment: "node",

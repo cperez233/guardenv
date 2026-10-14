@@ -64,6 +64,8 @@ interface EditorPanelProps {
   readonly onUndoRedaction: () => void;
   /** A folder was dropped or picked: its text files, ready to scan. */
   readonly onLoadFolder: (folder: FolderRead) => void;
+  /** Files read so far while a folder is loading (0 when it starts). */
+  readonly onFolderProgress: (read: number) => void;
   /** Files touched when the document is a unified diff. */
   readonly diffFiles: readonly string[] | null;
 }
@@ -94,6 +96,7 @@ export function EditorPanel({
   redaction,
   onUndoRedaction,
   onLoadFolder,
+  onFolderProgress,
   diffFiles,
 }: EditorPanelProps): ReactElement {
   const { t } = useLang();
@@ -213,7 +216,7 @@ export function EditorPanel({
       const items = event.dataTransfer.items;
       const file = event.dataTransfer.files.item(0);
       // A dropped directory becomes a folder scan; a single file opens in the editor.
-      void readDroppedFolder(items).then((folder) => {
+      void readDroppedFolder(items, onFolderProgress).then((folder) => {
         if (folder !== null) {
           setError(null);
           onLoadFolder(folder);
@@ -222,21 +225,22 @@ export function EditorPanel({
         }
       });
     },
-    [readFile, onLoadFolder],
+    [readFile, onLoadFolder, onFolderProgress],
   );
 
   const handleFolderInput = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
       const list = event.target.files;
       if (list !== null && list.length > 0) {
-        void readPickedFiles(list).then((folder) => {
+        onFolderProgress(0);
+        void readPickedFiles(list, onFolderProgress).then((folder) => {
           setError(null);
           onLoadFolder(folder);
         });
       }
       event.target.value = "";
     },
-    [onLoadFolder],
+    [onLoadFolder, onFolderProgress],
   );
 
   const handleFileInput = useCallback(

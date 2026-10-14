@@ -15,7 +15,8 @@ const MAX_THRESHOLD = 6.0;
 const STEP = 0.05;
 
 /** Chart geometry, in the SVG's own user units. Width follows the container. */
-const VIEW = { height: 240, padLeft: 34, padRight: 14, padTop: 16, padBottom: 28 };
+/** The right gutter holds the threshold chip, so it never covers a point. */
+const VIEW = { height: 240, padLeft: 34, padRight: 56, padTop: 16, padBottom: 28 };
 const MIN_WIDTH = 300;
 const PLOT_HEIGHT = VIEW.height - VIEW.padTop - VIEW.padBottom;
 
@@ -276,10 +277,20 @@ export function EntropySimulator({
                 strokeWidth={1.5}
                 strokeDasharray="6 4"
               />
-              <rect x={width - VIEW.padRight - 108} y={-21} width={108} height={17} rx={3} style={{ fill: INK }} />
+              <line
+                x1={width - VIEW.padRight}
+                x2={width - 48}
+                y1={0}
+                y2={0}
+                style={{ stroke: INK }}
+                strokeWidth={1.5}
+              />
+              <rect x={width - 48} y={-9} width={46} height={18} rx={3} style={{ fill: INK }}>
+                <title>{`${t.entropy.thresholdTag} ${threshold.toFixed(2)}`}</title>
+              </rect>
               <text
-                x={width - VIEW.padRight - 54}
-                y={-9}
+                x={width - 25}
+                y={4}
                 textAnchor="middle"
                 fill={MARK}
                 style={{ fill: "rgb(var(--c-ink-accent))" }}
@@ -287,7 +298,7 @@ export function EntropySimulator({
                 fontWeight={700}
                 fontFamily="'JetBrains Mono', ui-monospace, monospace"
               >
-                {t.entropy.thresholdTag} {threshold.toFixed(2)}
+                {threshold.toFixed(2)}
               </text>
             </motion.g>
 
@@ -317,6 +328,10 @@ export function EntropySimulator({
               {charset}
             </span>
           ))}
+          <span className="inline-flex items-center gap-1.5 font-mono text-[12px] text-content-secondary">
+            <span className="h-0 w-4 shrink-0 border-t-[1.5px] border-dashed border-ink" aria-hidden />
+            {t.entropy.thresholdTag}
+          </span>
           <span className="inline-flex items-center gap-1.5 font-mono text-[12px] text-content-tertiary">
             <span
               className="h-2.5 w-2.5 shrink-0 rounded-full border border-dashed border-content-tertiary"

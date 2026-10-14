@@ -54,6 +54,7 @@ export default function App(): ReactElement {
 
   // A scanned folder: its files, and which one is open in the editor.
   const [folder, setFolder] = useState<FolderRead | null>(null);
+  const [folderReading, setFolderReading] = useState<number | null>(null);
 
   const [activeFinding, setActiveFinding] = useState<ScanFinding | null>(null);
   const [activeLine, setActiveLine] = useState<number | null>(null);
@@ -172,9 +173,10 @@ export default function App(): ReactElement {
         <Hero summary={summary} hasInput={hasInput} filename={scanner.filename} diffFiles={scanner.diffFiles} />
 
         <main className="mx-auto flex max-w-[1600px] flex-col gap-5 px-4 pb-4 sm:px-6 lg:gap-6 lg:px-10">
-          {folder !== null && (
+          {(folder !== null || folderReading !== null) && (
             <FolderPanel
               folder={folder}
+              reading={folderReading}
               settings={settings}
               activePath={scanner.filename}
               onOpen={(file: FolderFile) => {
@@ -183,7 +185,10 @@ export default function App(): ReactElement {
                 setRedaction(null);
                 scanner.loadSample(file.content, file.path);
               }}
-              onClose={() => { setFolder(null); }}
+              onClose={() => {
+                setFolder(null);
+                setFolderReading(null);
+              }}
             />
           )}
 
@@ -211,7 +216,14 @@ export default function App(): ReactElement {
               onRedact={redact}
               redaction={redaction}
               onUndoRedaction={undoRedaction}
-              onLoadFolder={(read: FolderRead) => { setFolder(read); }}
+              onLoadFolder={(read: FolderRead) => {
+                setFolderReading(null);
+                setFolder(read);
+              }}
+              onFolderProgress={(read: number) => {
+                setFolder(null);
+                setFolderReading(read);
+              }}
               diffFiles={scanner.diffFiles}
             />
 

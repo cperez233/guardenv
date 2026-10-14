@@ -160,7 +160,12 @@ export const en = {
     summary: (files: number, withFindings: number) =>
       `${files} ${plural(files, "file", "files")} scanned · ${withFindings} with findings`,
     skipped: (n: number) => `${n} skipped (binary, too large, or in node_modules, .git, dist)`,
-    reading: (n: number) => `Reading ${n} files…`,
+    scanning: (done: number, total: number) => `Scanning ${done} of ${total} files…`,
+    filter: "Show",
+    withFindings: (n: number) => `With findings · ${n}`,
+    all: (n: number) => `All · ${n}`,
+    noneWithFindings: "No file in this folder has findings with the current settings.",
+    reading: (n: number) => `Reading files… ${n}`,
     clean: "clean",
     open: "Open in the editor",
     close: "Close folder scan",

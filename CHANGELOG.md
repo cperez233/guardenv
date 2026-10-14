@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Playground folder scan reads up to 2,000 files in parallel and scans them in
+  batches with a progress bar, then filters to files with findings.
+- The entropy chart's threshold value sits in its own gutter, so it never
+  covers a point on narrow screens.
+- A Spanish entry page at `/es` with its own Open Graph image and metadata;
+  the URL path follows the language switch.
+
 ## [1.1.0] - 2026-10-14
 
 ### Added

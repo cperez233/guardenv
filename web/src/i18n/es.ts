@@ -163,7 +163,12 @@ export const es: Dictionary = {
     summary: (files: number, withFindings: number) =>
       `${files} ${plural(files, "archivo escaneado", "archivos escaneados")} · ${withFindings} con hallazgos`,
     skipped: (n: number) => `${n} ${plural(n, "omitido", "omitidos")} (binarios, muy grandes o en node_modules, .git, dist)`,
-    reading: (n: number) => `Leyendo ${n} archivos…`,
+    scanning: (done: number, total: number) => `Escaneando ${done} de ${total} archivos…`,
+    filter: "Mostrar",
+    withFindings: (n: number) => `Con hallazgos · ${n}`,
+    all: (n: number) => `Todos · ${n}`,
+    noneWithFindings: "Ningún archivo de esta carpeta tiene hallazgos con la configuración actual.",
+    reading: (n: number) => `Leyendo archivos… ${n}`,
     clean: "limpio",
     open: "Abrir en el editor",
     close: "Cerrar el escaneo de carpeta",

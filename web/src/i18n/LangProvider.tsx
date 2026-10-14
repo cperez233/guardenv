@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactElement, ReactNode } from "react";
 
-import { LANG_STORAGE_KEY, LangContext, detectLang } from "./context";
+import { LANG_STORAGE_KEY, LangContext, detectLang, langFromPath, pathForLang } from "./context";
 import type { Lang } from "./context";
 import { en } from "./en";
 import type { Dictionary } from "./en";
@@ -14,8 +14,15 @@ export function LangProvider({ children }: { children: ReactNode }): ReactElemen
   const [lang, setLangState] = useState<Lang>(detectLang);
 
   // <html lang> follows the choice, so screen readers and hyphenation do too.
+  // The URL path follows the language too (/ or /es), keeping the hash with
+  // the share state, so a copied link previews in the language on screen.
   useEffect(() => {
     document.documentElement.lang = lang;
+    const { pathname, search, hash } = window.location;
+    const onEsPage = langFromPath(pathname) === "es";
+    if ((lang === "es") !== onEsPage) {
+      window.history.replaceState(window.history.state, "", `${pathForLang(lang)}${search}${hash}`);
+    }
   }, [lang]);
 
   const setLang = useCallback((next: Lang) => {

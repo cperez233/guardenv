@@ -178,7 +178,7 @@ cd web && npm install && npm run dev
 - **Analysis modes** — signatures only, entropy only, or both.
 - **Export** — copy or download the report as GuardEnv JSON or SARIF 2.1.0, byte-compatible with what the CLI emits.
 - **Diff mode** — paste a `git diff` or a PR patch: findings are attributed to the file each hunk touches, added lines are reported as new leaks, and secrets on removed lines are flagged as *still in history*, because deleting a line does not un-leak it.
-- **Folder scan** — drop or pick a folder; every text file is read and scanned in the tab (dependency and build directories, binaries and files over 2 MB are skipped) and listed worst-first.
+- **Folder scan** — drop or pick a folder (up to 2,000 text files); files are read in parallel and scanned in batches with a progress bar, so the page stays responsive, then listed worst-first with a "with findings / all" filter. Dependency and build directories, binaries and files over 2 MB are skipped.
 - **Encoded secrets** — base64 values (Kubernetes Secrets, Docker auth, "obfuscated" constants) are decoded and scanned too, and reported at the position of the encoded value. The CLI runs the same pass (`--no-decode` turns it off); in the playground it is a switch in the inspector.
 - **Risk grade** — an A–F exposure grade per document; any CRITICAL caps it at D, any HIGH at C, and checksum-verified tokens cost extra.
 - **How to fix** — selecting a finding opens provider-specific revocation steps and a link to the console where the key is rotated.
@@ -187,7 +187,7 @@ cd web && npm install && npm run dev
 - **Protect** — generated `.gitignore`, a `.env.example` with secret values emptied, and the pre-commit and GitHub Actions snippets.
 - **Keyboard** — `J` / `K` step through findings, `Esc` clears the selection.
 - **Share** — the analysis mode, threshold, severity floor and the loaded sample live in the URL hash, so a link reopens the same view. Pasted text never goes into the URL.
-- **English / Spanish, light / dark** — the language follows the browser on the first visit and the theme follows the system; both switches are remembered.
+- **English / Spanish, light / dark** — the language follows the browser on the first visit and the theme follows the system; both switches are remembered. The Spanish version lives at `/es` with its own share image and metadata, and the URL follows the language switch, so a copied link previews in the language on screen.
 
 ### Deployment
 
