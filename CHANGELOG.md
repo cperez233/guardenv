@@ -4,6 +4,31 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-10-14
+
+### Added
+
+- **Encoded secrets** — base64 values (Kubernetes Secrets, Docker auth,
+  "obfuscated" constants) are decoded and their plaintext scanned with the
+  signature rules; findings are reported at the encoded value. On by default,
+  `--no-decode` turns it off. The playground runs the same pass.
+- **Four new signatures** — `supabase-access-token`, `cloudflare-api-token`,
+  `vercel-token` and `discord-webhook` (52 rules in total).
+- **Playground** — diff mode (added vs. removed lines, per-file attribution),
+  folder scan, one-click redaction with undo, A–F risk grade, provider-specific
+  fix guides, false positives exported as a CLI-compatible baseline, a Protect
+  panel (`.gitignore`, `.env.example`, pre-commit, GitHub Actions), shareable
+  links, English/Spanish and a dark theme.
+- **Releases** — tagged releases publish the wheel and sdist as GitHub release
+  assets; PyPI publishing is gated behind the `PYPI_PUBLISH` repository variable.
+
+### Fixed
+
+- The playground was missing eight of the CLI's rules (Azure AD client secret,
+  Datadog, Discord bot, GitLab runner, Braintree, PyPI, both Twilio rules). Both
+  rulesets are identical again, and a test now fails if they drift.
+- The test suite no longer calls `os.geteuid()` on Windows.
+
 ## [1.0.0] - 2026-09-09
 
 First stable release.
@@ -59,4 +84,5 @@ First stable release.
   holds the GIL, and the benchmark measured thread pools as consistently slower
   (521 files/s serial versus 448 files/s with four threads).
 
+[1.1.0]: https://github.com/cperez233/guardenv/releases/tag/v1.1.0
 [1.0.0]: https://github.com/cperez233/guardenv/releases/tag/v1.0.0

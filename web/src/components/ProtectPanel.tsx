@@ -7,6 +7,7 @@ import type { ReactElement } from "react";
 import { GITHUB_ACTIONS_STEP, PRECOMMIT_CONFIG, envExampleFor, gitignoreFor } from "@/engine/protect";
 import type { ScanFinding } from "@/engine/types";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
+import { useLang } from "@/i18n/context";
 import { cx } from "@/lib/format";
 import { ease, reveal, spring } from "@/lib/motion";
 
@@ -28,6 +29,7 @@ interface Tab {
 }
 
 export function ProtectPanel({ source, filename, findings }: ProtectPanelProps): ReactElement {
+  const { t } = useLang();
   const [tab, setTab] = useState<TabId>("gitignore");
   const { state: copyState, copy } = useCopyToClipboard();
 
@@ -37,33 +39,33 @@ export function ProtectPanel({ source, filename, findings }: ProtectPanelProps):
         id: "gitignore",
         label: ".gitignore",
         file: ".gitignore",
-        lead: "Keep files like this one out of the repository in the first place.",
+        lead: t.protect.gitignore,
         body: gitignoreFor(filename),
       },
       {
         id: "example",
         label: ".env.example",
         file: ".env.example",
-        lead: "Commit this template instead: secret values emptied, harmless defaults kept.",
+        lead: t.protect.example,
         body: envExampleFor(source, findings),
-        empty: "This document is not KEY=value shaped. Load the .env sample or paste a dotenv file to get a template.",
+        empty: t.protect.exampleEmpty,
       },
       {
         id: "precommit",
         label: "pre-commit",
         file: ".pre-commit-config.yaml",
-        lead: "Block the commit on your machine when a credential is staged.",
+        lead: t.protect.precommit,
         body: PRECOMMIT_CONFIG,
       },
       {
         id: "actions",
         label: "GitHub Actions",
-        file: "workflow step",
-        lead: "Scan every push in CI and send the findings to the Security tab as SARIF.",
+        file: t.protect.actionsFile,
+        lead: t.protect.actions,
         body: GITHUB_ACTIONS_STEP,
       },
     ],
-    [source, filename, findings],
+    [source, filename, findings, t],
   );
 
   const active = tabs.find((entry) => entry.id === tab) ?? tabs[0];
@@ -83,22 +85,22 @@ export function ProtectPanel({ source, filename, findings }: ProtectPanelProps):
   return (
     <motion.section
       {...reveal}
-      aria-label="Protect"
+      aria-label={t.protect.title}
       className="overflow-hidden rounded-xl bg-ink text-surface-1 shadow-float"
     >
       <div className="grid gap-0 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
-        <div className="flex flex-col gap-5 border-b border-white/10 p-5 sm:p-7 lg:border-b-0 lg:border-r">
+        <div className="flex flex-col gap-5 border-b border-surface-1/10 p-5 sm:p-7 lg:border-b-0 lg:border-r">
           <div className="flex items-center gap-2.5">
-            <ShieldPlus className="h-5 w-5 shrink-0 text-mark" aria-hidden />
+            <ShieldPlus className="h-5 w-5 shrink-0 text-ink-accent" aria-hidden />
             <h2 className="font-display text-[clamp(1.6rem,3vw,2.2rem)] font-[850] leading-[1.05] tracking-[-0.02em] [font-stretch:112%]">
-              Protect
+              {t.protect.title}
             </h2>
           </div>
           <p className="max-w-[40ch] text-[16px] leading-relaxed text-surface-1/75">
-            Rotating fixes this leak. These files stop the next one, generated from the document above.
+            {t.protect.intro}
           </p>
 
-          <div role="tablist" aria-label="Protection snippets" className="flex flex-col gap-1">
+          <div role="tablist" aria-label={t.protect.tabs} className="flex flex-col gap-1">
             {tabs.map((entry) => {
               const selected = entry.id === tab;
               return (
@@ -110,15 +112,15 @@ export function ProtectPanel({ source, filename, findings }: ProtectPanelProps):
                   onClick={() => { setTab(entry.id); }}
                   className={cx(
                     "relative flex min-h-11 items-center justify-between gap-3 rounded-md px-3.5 py-2.5 text-left transition-colors duration-200",
-                    selected ? "text-ink" : "text-surface-1/70 hover:bg-white/5 hover:text-surface-1",
+                    selected ? "text-on-mark" : "text-surface-1/70 hover:bg-surface-1/5 hover:text-surface-1",
                   )}
                 >
                   {selected && (
                     <motion.span layoutId="protect-tab" transition={spring} className="absolute inset-0 rounded-md bg-mark" />
                   )}
                   <span className="relative font-mono text-[14px] font-bold">{entry.label}</span>
-                  <span className={cx("relative truncate text-[12px]", selected ? "text-ink/70" : "text-surface-1/45")}>
-                    {entry.body === null ? "not applicable" : `${entry.body.trimEnd().split("\n").length} lines`}
+                  <span className={cx("relative truncate text-[12px]", selected ? "text-on-mark/70" : "text-surface-1/45")}>
+                    {entry.body === null ? t.protect.notApplicable : t.protect.lines(entry.body.trimEnd().split("\n").length)}
                   </span>
                 </button>
               );
@@ -145,22 +147,22 @@ export function ProtectPanel({ source, filename, findings }: ProtectPanelProps):
                 type="button"
                 disabled={active.body === null}
                 onClick={() => { if (active.body !== null) void copy(active.body); }}
-                className="hit inline-flex items-center gap-1.5 rounded-md bg-mark px-3 py-1.5 text-[13px] font-semibold text-ink transition-transform duration-150 active:scale-[0.96] disabled:opacity-30"
+                className="hit inline-flex items-center gap-1.5 rounded-md bg-mark px-3 py-1.5 text-[13px] font-semibold text-on-mark transition-transform duration-150 active:scale-[0.96] disabled:opacity-30"
               >
                 {copyState === "copied" ? (
                   <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
                 ) : (
                   <ClipboardCopy className="h-3.5 w-3.5 shrink-0" aria-hidden />
                 )}
-                {copyState === "copied" ? "Copied" : copyState === "error" ? "Copy failed" : "Copy"}
+                {copyState === "copied" ? t.protect.copied : copyState === "error" ? t.protect.copyFailed : t.protect.copy}
               </button>
               {(active.id === "gitignore" || active.id === "example" || active.id === "precommit") && (
                 <button
                   type="button"
                   disabled={active.body === null}
                   onClick={download}
-                  aria-label={`Download ${active.file}`}
-                  className="hit inline-flex h-[30px] w-9 items-center justify-center rounded-md border border-white/20 text-surface-1 transition-[transform,border-color] duration-150 hover:border-white/50 active:scale-[0.96] disabled:opacity-30"
+                  aria-label={t.protect.download(active.file)}
+                  className="hit inline-flex h-[30px] w-9 items-center justify-center rounded-md border border-surface-1/20 text-surface-1 transition-[transform,border-color] duration-150 hover:border-surface-1/50 active:scale-[0.96] disabled:opacity-30"
                 >
                   <Download className="h-3.5 w-3.5 shrink-0" aria-hidden />
                 </button>
@@ -168,8 +170,8 @@ export function ProtectPanel({ source, filename, findings }: ProtectPanelProps):
             </div>
           </div>
 
-          <div className="relative mt-4 min-h-[16rem] overflow-hidden rounded-lg bg-black/35 ring-1 ring-white/10">
-            <div className="flex items-center gap-2 border-b border-white/10 px-4 py-2 font-mono text-[12px] text-surface-1/55">
+          <div className="relative mt-4 min-h-[16rem] overflow-hidden rounded-lg bg-surface-0/[0.07] ring-1 ring-surface-1/10">
+            <div className="flex items-center gap-2 border-b border-surface-1/10 px-4 py-2 font-mono text-[12px] text-surface-1/55">
               <span className="h-2 w-5 rounded-sm bg-mark" aria-hidden />
               {active.file}
             </div>

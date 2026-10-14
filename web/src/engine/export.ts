@@ -15,7 +15,7 @@ import {
   type SeverityLevel,
 } from "./types";
 
-export const TOOL_VERSION = "1.0.0";
+export const TOOL_VERSION = "1.1.0";
 export const TOOL_URI = "https://github.com/cperez233/guardenv";
 const SARIF_SCHEMA =
   "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json";

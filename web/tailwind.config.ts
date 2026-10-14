@@ -3,49 +3,56 @@ import type { Config } from "tailwindcss";
 /**
  * Palette notes: the playground is dressed as an audit file. A cool, steel-grey
  * sheet (not cream) carries graphite ink; the only non-semantic colour is the
- * auditor's highlighter, used as a mark *behind* text, never as text. Severity
- * hues are deepened so they read on paper rather than glow on black.
+ * auditor's highlighter, used as a mark *behind* text, never as text. Every
+ * token is a CSS variable (src/index.css) so the dark theme is a second set of
+ * values, not a second set of classes.
  */
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
+  darkMode: ["selector", '[data-theme="dark"]'],
   // Hover styles only where a real pointer hovers; touch gets :active instead.
   future: { hoverOnlyWhenSupported: true },
   theme: {
     extend: {
       colors: {
         surface: {
-          0: "#e6e8eb",
-          1: "#f4f5f7",
-          2: "#eceef1",
-          3: "#e1e4e8",
-          4: "#d5d9de",
+          0: "rgb(var(--c-surface-0) / <alpha-value>)",
+          1: "rgb(var(--c-surface-1) / <alpha-value>)",
+          2: "rgb(var(--c-surface-2) / <alpha-value>)",
+          3: "rgb(var(--c-surface-3) / <alpha-value>)",
+          4: "rgb(var(--c-surface-4) / <alpha-value>)",
         },
         hairline: {
-          DEFAULT: "#cfd4da",
-          strong: "#a7aeb7",
+          DEFAULT: "rgb(var(--c-hairline) / <alpha-value>)",
+          strong: "rgb(var(--c-hairline-strong) / <alpha-value>)",
         },
         content: {
-          primary: "#101317",
-          secondary: "#363d46",
-          tertiary: "#565e68",
-          faint: "#737b85",
+          primary: "rgb(var(--c-content-primary) / <alpha-value>)",
+          secondary: "rgb(var(--c-content-secondary) / <alpha-value>)",
+          tertiary: "rgb(var(--c-content-tertiary) / <alpha-value>)",
+          faint: "rgb(var(--c-content-faint) / <alpha-value>)",
         },
+        // "Ink" is the redaction bar and the primary action. It inverts with the
+        // theme: graphite on the light sheet, paper-white on the dark one.
         ink: {
-          DEFAULT: "#101317",
-          soft: "#1c2128",
+          DEFAULT: "rgb(var(--c-ink) / <alpha-value>)",
+          soft: "rgb(var(--c-ink-soft) / <alpha-value>)",
+          accent: "rgb(var(--c-ink-accent) / <alpha-value>)",
         },
         mark: {
           DEFAULT: "#e3f24a",
           soft: "#eef7a3",
           deep: "#b9c92a",
         },
+        // Text set on the highlighter: always dark, whatever the theme.
+        "on-mark": "#101317",
         severity: {
-          critical: "#c42033",
-          high: "#cf4a17",
-          medium: "#9a6400",
-          low: "#1d68ad",
-          info: "#5e6670",
-          clean: "#17774a",
+          critical: "rgb(var(--c-sev-critical) / <alpha-value>)",
+          high: "rgb(var(--c-sev-high) / <alpha-value>)",
+          medium: "rgb(var(--c-sev-medium) / <alpha-value>)",
+          low: "rgb(var(--c-sev-low) / <alpha-value>)",
+          info: "rgb(var(--c-sev-info) / <alpha-value>)",
+          clean: "rgb(var(--c-sev-clean) / <alpha-value>)",
         },
       },
       fontFamily: {
@@ -55,9 +62,9 @@ export default {
       },
       boxShadow: {
         // One elevation scale, tinted to the graphite ink.
-        rest: "0 1px 0 rgb(16 19 23 / 0.04), 0 1px 2px rgb(16 19 23 / 0.06)",
-        raised: "0 1px 0 rgb(16 19 23 / 0.04), 0 12px 32px -12px rgb(16 19 23 / 0.18)",
-        float: "0 1px 0 rgb(16 19 23 / 0.05), 0 24px 60px -20px rgb(16 19 23 / 0.32)",
+        rest: "0 1px 0 rgb(var(--c-shadow) / 0.04), 0 1px 2px rgb(var(--c-shadow) / 0.06)",
+        raised: "0 1px 0 rgb(var(--c-shadow) / 0.04), 0 12px 32px -12px rgb(var(--c-shadow) / var(--shadow-strength, 0.18))",
+        float: "0 1px 0 rgb(var(--c-shadow) / 0.05), 0 24px 60px -20px rgb(var(--c-shadow) / var(--shadow-float, 0.32))",
       },
       keyframes: {
         "fade-in": {

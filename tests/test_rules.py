@@ -315,3 +315,40 @@ class TestRuleIndex:
     def test_empty_ruleset_yields_nothing(self) -> None:
         index = RuleIndex(())
         assert index.candidates("AKIAZ4KJQ2WBXY7TDNPQ") == ()
+
+
+# Fixtures are assembled from parts so no complete provider token sits in the
+# source as a literal (GitHub push protection reads test files too).
+NEW_PROVIDER_CASES = {
+    "supabase-access-token": "SUPABASE_ACCESS_TOKEN=" + "sbp_" + "3f9a" * 10,
+    "cloudflare-api-token": "CLOUDFLARE_API_TOKEN=" + "Zx7Kq2Lm9Pv4Rt8W" + "n3Yb6Hc1Jd5Fg0Ss2Aa9Ee4Q",
+    "vercel-token": "VERCEL_TOKEN=" + "Ab3dE5fG7hJ9" + "kL1mN2pQ4rS6",
+    "discord-webhook": "https://discord.com/api/webhooks/" + "112233445566778899/" + "Ab1_" * 16,
+    "discord-bot-token": "DISCORD_BOT_TOKEN="
+    + "M"
+    + "Tk4NzY1NDMyMTA5ODc2NTQz"
+    + ".Gh7Kp2."
+    + "Xy9Wv8Uu7Tt6Ss5Rr4Qq3Pp2Oo1",
+    "azure-ad-client-secret": "AZURE_CLIENT_SECRET=" + "abc8Q~" + "Zx7Kq2Lm9Pv4Rt8Wn3Yb6Hc1Jd5Fg0Ss2A",
+    "gitlab-runner-token": "token: " + "glrt-" + "Ab3dE5fG7hJ9kL1mN2pQ",
+    "paypal-braintree-token": "BT="
+    + "access_token$production$"
+    + "x9k2m4p6r8t0v1w3$"
+    + "0123456789abcdef" * 2,
+    "twilio-api-key": "TWILIO_KEY=" + "SK" + "0123456789abcdef" * 2,
+    "twilio-account-sid": "TWILIO_SID=" + "AC" + "fedcba9876543210" * 2,
+    "pypi-upload-token": "password = " + "pypi-AgEIcHlwaS5vcmc" + "Ab3dE5fG7hJ9kL1mN2pQ" * 3,
+    "datadog-api-key": "DD_API_KEY=" + "0123456789abcdef" + "fedcba9876543210",
+}
+
+
+@pytest.mark.parametrize(("rule_id", "line"), sorted(NEW_PROVIDER_CASES.items()))
+def test_provider_rules_detect_their_token(rule_id: str, line: str) -> None:
+    assert rule_id in rule_ids_for(line)
+
+
+def test_context_rules_need_their_variable_name() -> None:
+    assert "cloudflare-api-token" not in rule_ids_for(
+        "TOKEN=" + "Zx7Kq2Lm9Pv4Rt8W" + "n3Yb6Hc1Jd5Fg0Ss2Aa9Ee4Q"
+    )
+    assert "vercel-token" not in rule_ids_for("TOKEN=" + "Ab3dE5fG7hJ9" + "kL1mN2pQ4rS6")

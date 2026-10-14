@@ -1,6 +1,6 @@
 /* editorial-ui · Cristian Pérez · cristianperez.me */
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, ClipboardCopy, EyeOff, FileCode2, Trash2, Undo2, Upload } from "lucide-react";
+import { Check, ClipboardCopy, EyeOff, FileCode2, FolderOpen, GitCompareArrows, Trash2, Undo2, Upload } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent, UIEvent, ReactElement } from "react";
 
@@ -9,6 +9,9 @@ import { SEVERITY_RANK } from "@/engine/types";
 import { SAMPLE_DOCUMENTS } from "@/lib/samples";
 import { SEVERITY_CLASSES, cx, formatBytes } from "@/lib/format";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
+import { useLang } from "@/i18n/context";
+import { readDroppedFolder, readPickedFiles } from "@/lib/folder";
+import type { FolderRead } from "@/lib/folder";
 import { ease, reveal, softSpring, spring } from "@/lib/motion";
 
 /** Files a text-oriented scanner can meaningfully read. */
@@ -59,6 +62,10 @@ interface EditorPanelProps {
   /** Outcome of the last redaction, while the redacted text is untouched. */
   readonly redaction: { readonly count: number } | null;
   readonly onUndoRedaction: () => void;
+  /** A folder was dropped or picked: its text files, ready to scan. */
+  readonly onLoadFolder: (folder: FolderRead) => void;
+  /** Files touched when the document is a unified diff. */
+  readonly diffFiles: readonly string[] | null;
 }
 
 /** Worst severity per line, so the gutter can carry a single colour. */
@@ -86,7 +93,10 @@ export function EditorPanel({
   onRedact,
   redaction,
   onUndoRedaction,
+  onLoadFolder,
+  diffFiles,
 }: EditorPanelProps): ReactElement {
+  const { t } = useLang();
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
@@ -96,6 +106,7 @@ export function EditorPanel({
   const [sweep, setSweep] = useState(0);
   const [metrics, setMetrics] = useState({ charWidth: 7.8, padLeft: 16 });
   const inputRef = useRef<HTMLInputElement>(null);
+  const folderRef = useRef<HTMLInputElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const measureRef = useRef<HTMLSpanElement>(null);
@@ -176,33 +187,56 @@ export function EditorPanel({
     (file: File) => {
       setError(null);
       if (file.size > MAX_FILE_BYTES) {
-        setError(`${file.name} is ${formatBytes(file.size)}; the playground caps files at 2 MB.`);
+        setError(t.editor.tooBig(file.name, formatBytes(file.size)));
         return;
       }
       const reader = new FileReader();
-      reader.onerror = () => { setError(`Could not read ${file.name}.`); };
+      reader.onerror = () => { setError(t.editor.readFailed(file.name)); };
       reader.onload = () => {
         const text = typeof reader.result === "string" ? reader.result : "";
         // A NUL byte in the first 8 KiB is the same binary test the CLI uses.
         if (text.slice(0, 8192).includes("\u0000")) {
-          setError(`${file.name} looks binary; GuardEnv only scans text.`);
+          setError(t.editor.binary(file.name));
           return;
         }
         loadDocument(text, file.name);
       };
       reader.readAsText(file);
     },
-    [loadDocument],
+    [loadDocument, t],
   );
 
   const handleDrop = useCallback(
     (event: DragEvent<HTMLDivElement>) => {
       event.preventDefault();
       setIsDragging(false);
+      const items = event.dataTransfer.items;
       const file = event.dataTransfer.files.item(0);
-      if (file !== null) readFile(file);
+      // A dropped directory becomes a folder scan; a single file opens in the editor.
+      void readDroppedFolder(items).then((folder) => {
+        if (folder !== null) {
+          setError(null);
+          onLoadFolder(folder);
+        } else if (file !== null) {
+          readFile(file);
+        }
+      });
     },
-    [readFile],
+    [readFile, onLoadFolder],
+  );
+
+  const handleFolderInput = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const list = event.target.files;
+      if (list !== null && list.length > 0) {
+        void readPickedFiles(list).then((folder) => {
+          setError(null);
+          onLoadFolder(folder);
+        });
+      }
+      event.target.value = "";
+    },
+    [onLoadFolder],
   );
 
   const handleFileInput = useCallback(
@@ -223,7 +257,7 @@ export function EditorPanel({
   return (
     <motion.section
       {...reveal}
-      aria-label="Source editor"
+      aria-label={t.editor.region}
       className={cx(
         "relative flex min-h-0 flex-col overflow-hidden rounded-xl bg-surface-1 shadow-raised ring-1 transition-[box-shadow] duration-300 xl:h-[min(80svh,780px)]",
         isDragging ? "ring-2 ring-ink" : "ring-hairline",
@@ -238,7 +272,7 @@ export function EditorPanel({
       <div className="flex flex-wrap items-center gap-2 border-b border-hairline px-3 py-2.5 sm:px-4">
         <FileCode2 className="h-4 w-4 shrink-0 text-content-tertiary" aria-hidden />
         <label className="sr-only" htmlFor="guardenv-filename">
-          File name
+          {t.editor.fileName}
         </label>
         <input
           id="guardenv-filename"
@@ -256,19 +290,26 @@ export function EditorPanel({
             onClick={startRedaction}
             disabled={!canRedact || isRedacting}
             whileTap={{ scale: 0.95 }}
-            title="Black out every reported credential in this document"
+            title={t.editor.redactTitle}
             className="hit group inline-flex items-center gap-1.5 rounded-md bg-ink px-2.5 py-1.5 text-[13px] font-semibold text-surface-1 shadow-rest transition-[background-color,opacity] duration-150 hover:bg-ink-soft disabled:cursor-not-allowed disabled:opacity-35"
           >
-            <EyeOff className="h-3.5 w-3.5 shrink-0 text-mark transition-transform duration-200 group-hover:-rotate-12" aria-hidden />
-            Redact
+            <EyeOff className="h-3.5 w-3.5 shrink-0 text-ink-accent transition-transform duration-200 group-hover:-rotate-12" aria-hidden />
+            {t.editor.redact}
           </motion.button>
           <button type="button" onClick={() => inputRef.current?.click()} className={toolButton}>
             <Upload className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            Upload
+            <span className="hidden sm:inline">{t.editor.upload}</span>
+            <span className="sr-only sm:hidden">{t.editor.upload}</span>
+          </button>
+          <button type="button" onClick={() => folderRef.current?.click()} title={t.editor.folderTitle} className={toolButton}>
+            <FolderOpen className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span className="hidden sm:inline">{t.editor.folder}</span>
+            <span className="sr-only sm:hidden">{t.editor.folder}</span>
           </button>
           <button type="button" onClick={onClear} disabled={source.length === 0} className={toolButton}>
             <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            Clear
+            <span className="hidden sm:inline">{t.editor.clear}</span>
+            <span className="sr-only sm:hidden">{t.editor.clear}</span>
           </button>
         </div>
         <input
@@ -278,22 +319,31 @@ export function EditorPanel({
           onChange={handleFileInput}
           className="hidden"
         />
+        <input
+          ref={folderRef}
+          type="file"
+          // Non-standard but supported by every current engine for picking a directory.
+          {...{ webkitdirectory: "", directory: "" }}
+          multiple
+          onChange={handleFolderInput}
+          className="hidden"
+        />
       </div>
 
       <div className="flex flex-wrap items-center gap-1 border-b border-hairline px-3 py-1.5 sm:px-4">
-        <span className="mr-1 shrink-0 text-[13px] font-semibold text-content-secondary sm:mr-2">Samples</span>
+        <span className="mr-1 shrink-0 text-[13px] font-semibold text-content-secondary sm:mr-2">{t.editor.samples}</span>
         {SAMPLE_DOCUMENTS.map((sample) => {
           const active = activeSampleId === sample.id;
           return (
             <motion.button
               key={sample.id}
               type="button"
-              title={sample.description}
+              title={t.editor.sampleTitles[sample.id] ?? sample.description}
               onClick={() => { loadDocument(sample.content, sample.filename); }}
               whileTap={{ scale: 0.95 }}
               className={cx(
                 "relative h-10 shrink-0 rounded-md px-2 font-mono sm:h-8 sm:px-2.5 text-[13px] transition-colors",
-                active ? "text-content-primary" : "text-content-tertiary hover:bg-surface-2 hover:text-content-primary",
+                active ? "text-on-mark" : "text-content-tertiary hover:bg-surface-2 hover:text-content-primary",
               )}
             >
               {active && (
@@ -307,6 +357,22 @@ export function EditorPanel({
             </motion.button>
           );
         })}
+        <AnimatePresence initial={false}>
+          {diffFiles !== null && (
+            <motion.span
+              key="diff"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={softSpring}
+              title={t.editor.diffTitle}
+              className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-md bg-ink px-2 py-1 font-mono text-[12px] font-bold text-surface-1"
+            >
+              <GitCompareArrows className="h-3.5 w-3.5 shrink-0 text-ink-accent" aria-hidden />
+              {t.editor.diffChip(diffFiles.length)}
+            </motion.span>
+          )}
+        </AnimatePresence>
       </div>
 
       <AnimatePresence initial={false}>
@@ -341,25 +407,25 @@ export function EditorPanel({
                 initial={{ scale: 0.6, rotate: -14 }}
                 animate={{ scale: 1, rotate: -4 }}
                 transition={{ ...softSpring, delay: 0.1 }}
-                className="rounded-[3px] border-2 border-mark px-1.5 py-0.5 font-display text-[12px] font-[850] uppercase tracking-[0.08em] text-mark [font-stretch:110%]"
+                className="rounded-[3px] border-2 border-ink-accent px-1.5 py-0.5 font-display text-[12px] font-[850] uppercase tracking-[0.08em] text-ink-accent [font-stretch:110%]"
               >
-                Redacted
+                {t.editor.redacted}
               </motion.span>
               <span className="min-w-[12rem] flex-1 text-[14px] leading-snug text-surface-1/85">
-                {redaction.count} {redaction.count === 1 ? "secret" : "secrets"} blacked out. This copy is safe to share.
+                {t.editor.redactedBody(redaction.count)}
               </span>
               <span className="flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => void copy(source)}
-                  className="hit inline-flex items-center gap-1.5 rounded-md bg-mark px-2.5 py-1 text-[13px] font-semibold text-ink transition-transform duration-150 active:scale-[0.96]"
+                  className="hit inline-flex items-center gap-1.5 rounded-md bg-mark px-2.5 py-1 text-[13px] font-semibold text-on-mark transition-transform duration-150 active:scale-[0.96]"
                 >
                   {copyState === "copied" ? (
                     <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
                   ) : (
                     <ClipboardCopy className="h-3.5 w-3.5 shrink-0" aria-hidden />
                   )}
-                  {copyState === "copied" ? "Copied" : copyState === "error" ? "Copy failed" : "Copy"}
+                  {copyState === "copied" ? t.editor.copied : copyState === "error" ? t.editor.copyFailed : t.editor.copy}
                 </button>
                 <button
                   type="button"
@@ -370,7 +436,7 @@ export function EditorPanel({
                   className="hit inline-flex items-center gap-1.5 rounded-md border border-surface-1/25 px-2.5 py-1 text-[13px] font-semibold text-surface-1 transition-[transform,border-color] duration-150 hover:border-surface-1/60 active:scale-[0.96]"
                 >
                   <Undo2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                  Undo
+                  {t.editor.undo}
                 </button>
               </span>
             </div>
@@ -396,7 +462,7 @@ export function EditorPanel({
                   className={cx(
                     "relative pr-2.5 transition-colors duration-200",
                     severity !== undefined && cx(SEVERITY_CLASSES[severity].text, "font-bold"),
-                    activeLine === lineNumber && "bg-ink !text-mark",
+                    activeLine === lineNumber && "bg-ink !text-ink-accent",
                   )}
                 >
                   {severity !== undefined && (
@@ -426,9 +492,13 @@ export function EditorPanel({
                       key={`${filename}-${line}`}
                       className={cx(
                         "absolute left-1.5 right-1.5 origin-left rounded-[3px] transition-colors duration-200",
-                        active ? "bg-mark" : "bg-mark/45",
+                        "bg-mark",
                       )}
-                      style={{ top: PAD_PX + (line - 1) * LINE_PX + 2, height: LINE_PX - 4 }}
+                      style={{
+                        top: PAD_PX + (line - 1) * LINE_PX + 2,
+                        height: LINE_PX - 4,
+                        opacity: active ? "var(--mark-line-active)" : "var(--mark-line)",
+                      }}
                       initial={{ clipPath: "inset(0 100% 0 0)" }}
                       animate={{ clipPath: "inset(0 0% 0 0)" }}
                       exit={{ opacity: 0 }}
@@ -478,7 +548,7 @@ export function EditorPanel({
               transition={{ duration: 1.1, delay: sweep === 0 ? 0.5 : 0, ease: [0.45, 0, 0.2, 1], opacity: { times: [0, 0.8, 1], duration: 1.1, delay: sweep === 0 ? 0.5 : 0 } }}
               style={{
                 background:
-                  "linear-gradient(to bottom, transparent calc(100% - 72px), rgb(227 242 74 / 0.35) calc(100% - 4px), #101317 calc(100% - 2px), #101317 100%)",
+                  "linear-gradient(to bottom, transparent calc(100% - 72px), rgb(227 242 74 / 0.35) calc(100% - 4px), rgb(var(--c-ink)) calc(100% - 2px), rgb(var(--c-ink)) 100%)",
               }}
             />
           </div>
@@ -492,7 +562,7 @@ export function EditorPanel({
           </span>
 
           <label className="sr-only" htmlFor="guardenv-source">
-            Source to scan
+            {t.editor.source}
           </label>
           <textarea
             ref={textareaRef}
@@ -507,7 +577,7 @@ export function EditorPanel({
             // Soft wrapping would desynchronise the gutter: one logical line has to
             // occupy exactly one visual row for the numbering to stay honest.
             wrap="off"
-            placeholder="Paste a .env file, a config or any source code — nothing leaves your browser."
+            placeholder={t.editor.placeholder}
             className="relative h-full w-full resize-none overflow-auto whitespace-pre bg-transparent px-3 font-mono text-[13px] text-content-primary caret-ink outline-none placeholder:text-content-faint focus-visible:ring-0 focus-visible:ring-offset-0 sm:px-4"
             style={{ lineHeight: `${LINE_PX}px`, paddingTop: PAD_PX, paddingBottom: PAD_PX }}
           />
@@ -530,7 +600,7 @@ export function EditorPanel({
                 className="flex flex-col items-center gap-2 text-content-primary"
               >
                 <Upload className="h-6 w-6" aria-hidden />
-                <span className="marker text-[15px] font-semibold">Drop the file to scan it</span>
+                <span className="marker text-[15px] font-semibold">{t.editor.drop}</span>
               </motion.div>
             </motion.div>
           )}

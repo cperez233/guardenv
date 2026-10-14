@@ -6,6 +6,8 @@
  * the CLI must not disagree about what counts as a secret.
  */
 
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -445,5 +447,39 @@ describe("exporters", () => {
 
   it("renders a clean Markdown report when there are none", () => {
     expect(toMarkdownReport(scanText("DEBUG=true\n"))).toContain("No credentials detected");
+  });
+});
+
+// Assembled from parts so no complete provider token sits in the source.
+const NEW_PROVIDER_CASES: Readonly<Record<string, string>> = {
+  "supabase-access-token": "SUPABASE_ACCESS_TOKEN=" + "sbp_" + "3f9a".repeat(10),
+  "cloudflare-api-token": "CLOUDFLARE_API_TOKEN=" + "Zx7Kq2Lm9Pv4Rt8W" + "n3Yb6Hc1Jd5Fg0Ss2Aa9Ee4Q",
+  "vercel-token": "VERCEL_TOKEN=" + "Ab3dE5fG7hJ9" + "kL1mN2pQ4rS6",
+  "discord-webhook": "https://discord.com/api/webhooks/" + "112233445566778899/" + "Ab1_".repeat(16),
+  "discord-bot-token":
+    "DISCORD_BOT_TOKEN=" + "M" + "Tk4NzY1NDMyMTA5ODc2NTQz" + ".Gh7Kp2." + "Xy9Wv8Uu7Tt6Ss5Rr4Qq3Pp2Oo1",
+  "azure-ad-client-secret": "AZURE_CLIENT_SECRET=" + "abc8Q~" + "Zx7Kq2Lm9Pv4Rt8Wn3Yb6Hc1Jd5Fg0Ss2A",
+  "gitlab-runner-token": "token: " + "glrt-" + "Ab3dE5fG7hJ9kL1mN2pQ",
+  "paypal-braintree-token":
+    "BT=" + "access_token$production$" + "x9k2m4p6r8t0v1w3$" + "0123456789abcdef".repeat(2),
+  "twilio-api-key": "TWILIO_KEY=" + "SK" + "0123456789abcdef".repeat(2),
+  "twilio-account-sid": "TWILIO_SID=" + "AC" + "fedcba9876543210".repeat(2),
+  "pypi-upload-token": "password = " + "pypi-AgEIcHlwaS5vcmc" + "Ab3dE5fG7hJ9kL1mN2pQ".repeat(3),
+  "datadog-api-key": "DD_API_KEY=" + "0123456789abcdef" + "fedcba9876543210",
+};
+
+describe("provider rules shared with the CLI", () => {
+  for (const [ruleId, line] of Object.entries(NEW_PROVIDER_CASES)) {
+    it(`detects ${ruleId}`, () => {
+      const ids = scanText(line).findings.map((finding) => finding.ruleId);
+      expect(ids).toContain(ruleId);
+    });
+  }
+
+  it("carries exactly the rule ids of guardenv/rules.py", () => {
+    const python = readFileSync(new URL("../../../guardenv/rules.py", import.meta.url), "utf8");
+    const ids = [...python.matchAll(/_rule\(\s*"([a-z0-9-]+)",/g)].map((match) => match[1]);
+    expect(ids.length).toBeGreaterThan(40);
+    expect(RULES.map((rule) => rule.id).sort()).toEqual([...ids].sort());
   });
 });

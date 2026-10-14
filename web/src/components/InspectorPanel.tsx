@@ -27,7 +27,9 @@ import type { ExportFormat } from "@/engine/export";
 import { SEVERITY_LEVELS } from "@/engine/types";
 import type { ScanFinding, ScanSummary, SeverityLevel } from "@/engine/types";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
-import { SEVERITY_CLASSES, cx, formatDuration, formatEntropy, pluralize } from "@/lib/format";
+import { useLang } from "@/i18n/context";
+import { describeFinding } from "@/i18n/describe";
+import { SEVERITY_CLASSES, cx, formatDuration, formatEntropy } from "@/lib/format";
 import { ease, reveal, softSpring, spring } from "@/lib/motion";
 import { RollingNumber, SpringNumber } from "./Numbers";
 import { SeverityBadge } from "./SeverityBadge";
@@ -61,9 +63,11 @@ function FindingRow({
   onSelect: () => void;
   onIgnore: () => void;
 }): ReactElement {
+  const { t, lang } = useLang();
   const classes = SEVERITY_CLASSES[finding.severity];
-  const fix = remediationFor(finding);
+  const fix = remediationFor(finding, lang);
   const encoded = finding.tags.includes("encoded");
+  const diffKind = finding.tags.find((tag) => tag.startsWith("diff-"))?.slice(5) ?? null;
   return (
     <motion.li
       layout="position"
@@ -71,7 +75,7 @@ function FindingRow({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, x: 40, transition: { duration: 0.22, ease } }}
       transition={{ duration: 0.45, delay: Math.min(index * 0.05, 0.4), ease }}
-      className={cx("relative border-b border-hairline last:border-b-0", isActive && "bg-mark/25")}
+      className={cx("relative border-b border-hairline last:border-b-0", isActive && "bg-mark/25 dark:bg-mark/10")}
     >
       {/* Severity tab on the left edge; it grows into an ink bar when selected. */}
       <span
@@ -89,7 +93,7 @@ function FindingRow({
         aria-expanded={isActive}
         className={cx(
           "group relative w-full px-4 py-3.5 text-left transition-colors duration-200 active:bg-surface-3 sm:px-5",
-          isActive ? "bg-mark/20" : "hover:bg-surface-2",
+          isActive ? "bg-mark/20 dark:bg-mark/5" : "hover:bg-surface-2",
         )}
       >
         <div className="flex flex-wrap items-center gap-2">
@@ -97,25 +101,38 @@ function FindingRow({
           <code className="min-w-0 break-all font-mono text-[14px] font-bold text-content-primary">{finding.ruleId}</code>
           {encoded && (
             <span
-              title="Found by decoding a base64 value"
-              className="inline-flex shrink-0 items-center gap-1 rounded bg-ink px-1.5 py-0.5 font-mono text-[11px] font-bold text-mark"
+              title={t.inspector.base64Title}
+              className="inline-flex shrink-0 items-center gap-1 rounded bg-ink px-1.5 py-0.5 font-mono text-[11px] font-bold text-ink-accent"
             >
               <Binary className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              base64
+              {t.inspector.base64}
+            </span>
+          )}
+          {diffKind !== null && diffKind !== "meta" && (
+            <span
+              className={cx(
+                "inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[11px] font-bold",
+                diffKind === "added" && "bg-severity-critical/10 text-severity-critical",
+                diffKind === "removed" && "bg-severity-medium/15 text-severity-medium",
+                diffKind === "context" && "bg-surface-3 text-content-tertiary",
+              )}
+            >
+              {diffKind === "added" ? "+ " : diffKind === "removed" ? "− " : ""}
+              {diffKind === "added" ? t.inspector.diffAdded : diffKind === "removed" ? t.inspector.diffRemoved : t.inspector.diffContext}
             </span>
           )}
           {finding.verified && (
             <span
-              title="Checksum verified against the provider's token format"
+              title={t.inspector.verifiedTitle}
               className="inline-flex shrink-0 items-center gap-1 rounded bg-severity-clean/10 px-1.5 py-0.5 text-[12px] font-semibold text-severity-clean"
             >
               <BadgeCheck className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              verified
+              {t.inspector.verified}
             </span>
           )}
           <span
             className="ml-auto inline-flex shrink-0 items-center gap-1 font-mono text-[12px] text-content-tertiary"
-            title={finding.detector === "entropy" ? "Entropy detector" : "Signature detector"}
+            title={finding.detector === "entropy" ? t.inspector.entropyDetector : t.inspector.signatureDetector}
           >
             {finding.detector === "entropy" ? (
               <Sigma className="h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -130,7 +147,7 @@ function FindingRow({
           </span>
         </div>
 
-        <p className="mt-1.5 text-[15px] leading-snug text-content-secondary">{finding.description}</p>
+        <p className="mt-1.5 text-[15px] leading-snug text-content-secondary">{describeFinding(finding, lang)}</p>
 
         <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 font-mono text-[12px]">
           <span className="text-content-tertiary">
@@ -164,7 +181,7 @@ function FindingRow({
               <div className="rounded-lg bg-surface-1 p-3.5 shadow-rest ring-1 ring-hairline sm:p-4">
                 <p className="flex items-center gap-2 text-[13px] font-bold text-content-primary">
                   <Wrench className="h-4 w-4 shrink-0" aria-hidden />
-                  How to fix
+                  {t.inspector.howToFix}
                 </p>
                 <ol className="mt-2.5 flex flex-col gap-2 text-[14px] leading-snug text-content-secondary">
                   {[fix.revoke, ...fix.steps].map((step, stepIndex) => (
@@ -178,7 +195,7 @@ function FindingRow({
                       <span
                         className={cx(
                           "mt-[1px] grid h-5 w-5 shrink-0 place-items-center rounded-[4px] font-mono text-[11px] font-bold",
-                          stepIndex === 0 ? "bg-ink text-mark" : "bg-surface-3 text-content-secondary",
+                          stepIndex === 0 ? "bg-ink text-ink-accent" : "bg-surface-3 text-content-secondary",
                         )}
                       >
                         {stepIndex + 1}
@@ -196,17 +213,17 @@ function FindingRow({
                       className="hit inline-flex items-center gap-1.5 rounded-md bg-ink px-3 py-1.5 text-[13px] font-semibold text-surface-1 transition-[transform,background-color] duration-150 hover:bg-ink-soft active:scale-[0.96]"
                     >
                       {fix.console.label}
-                      <ExternalLink className="h-3.5 w-3.5 shrink-0 text-mark" aria-hidden />
+                      <ExternalLink className="h-3.5 w-3.5 shrink-0 text-ink-accent" aria-hidden />
                     </a>
                   )}
                   <button
                     type="button"
                     onClick={onIgnore}
-                    title="Hide it here and add it to the baseline you can download"
+                    title={t.inspector.falsePositiveTitle}
                     className="hit inline-flex items-center gap-1.5 rounded-md border border-hairline bg-surface-1 px-3 py-1.5 text-[13px] font-medium text-content-secondary transition-[color,border-color,transform] duration-150 hover:border-hairline-strong hover:text-content-primary active:scale-[0.96]"
                   >
                     <BellOff className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                    Mark as false positive
+                    {t.inspector.falsePositive}
                   </button>
                 </div>
               </div>
@@ -219,7 +236,8 @@ function FindingRow({
 }
 
 function CopyLabel({ state, idle, error }: { state: string; idle: string; error?: string }): ReactElement {
-  const label = state === "copied" ? "Copied" : state === "error" && error !== undefined ? error : idle;
+  const { t } = useLang();
+  const label = state === "copied" ? t.inspector.copied : state === "error" && error !== undefined ? error : idle;
   return (
     <AnimatePresence mode="popLayout" initial={false}>
       <motion.span
@@ -248,6 +266,7 @@ export function InspectorPanel({
   onIgnore,
   onRestoreIgnored,
 }: InspectorPanelProps): ReactElement {
+  const { t } = useLang();
   const [baselineError, setBaselineError] = useState<string | null>(null);
 
   const downloadBaseline = (): void => {
@@ -261,7 +280,7 @@ export function InspectorPanel({
         link.click();
         window.setTimeout(() => { URL.revokeObjectURL(url); }, 1000);
       })
-      .catch(() => { setBaselineError("This browser cannot compute the baseline (needs a secure context)."); });
+      .catch(() => { setBaselineError(t.inspector.baselineError); });
   };
   const [format, setFormat] = useState<ExportFormat>("json");
   const { state: copyState, copy } = useCopyToClipboard();
@@ -293,24 +312,24 @@ export function InspectorPanel({
     <motion.section
       {...reveal}
       transition={{ ...reveal.transition, delay: 0.08 }}
-      aria-label="Audit inspector"
+      aria-label={t.inspector.title}
       className="flex min-h-0 flex-col overflow-hidden rounded-xl bg-surface-1 shadow-raised ring-1 ring-hairline xl:h-[min(80svh,780px)]"
     >
       <div className="flex flex-wrap items-center gap-2 border-b border-hairline px-4 py-2.5 sm:px-5">
         <ShieldCheck className="h-4 w-4 shrink-0 text-content-tertiary" aria-hidden />
         <h2 className="font-display text-[17px] font-[750] tracking-[-0.01em] [font-stretch:110%]">
-          Audit inspector
+          {t.inspector.title}
         </h2>
         {summary.findings.length > 1 && (
           <span className="ml-2 hidden items-center gap-1 text-[12px] text-content-tertiary [@media(hover:hover)_and_(pointer:fine)]:2xl:inline-flex">
             <kbd className="rounded border border-hairline bg-surface-2 px-1.5 font-mono text-[11px] font-bold text-content-secondary">J</kbd>
             <kbd className="rounded border border-hairline bg-surface-2 px-1.5 font-mono text-[11px] font-bold text-content-secondary">K</kbd>
-            step through
+            {t.inspector.stepThrough}
           </span>
         )}
         <label
           className="ml-auto flex cursor-pointer select-none items-center gap-2 text-[13px] font-medium text-content-tertiary"
-          title="Decode base64 values and scan what is inside them"
+          title={t.inspector.decodeTitle}
         >
           <input
             type="checkbox"
@@ -332,10 +351,10 @@ export function InspectorPanel({
               className={cx("absolute top-[3px] h-[14px] w-[14px] rounded-full", decodeEncoded ? "bg-mark" : "bg-surface-1")}
             />
           </span>
-          Decode base64
+          {t.inspector.decode}
         </label>
         <label className="flex items-center gap-2 text-[13px] font-medium text-content-tertiary">
-          Min severity
+          {t.inspector.minSeverity}
           <select
             value={minSeverity}
             onChange={(event) => { onMinSeverityChange(event.target.value as SeverityLevel); }}
@@ -352,28 +371,28 @@ export function InspectorPanel({
 
       <div className="grid grid-cols-2 divide-hairline border-b border-hairline sm:grid-cols-4 sm:divide-x [&>*:nth-child(-n+2)]:border-b [&>*:nth-child(-n+2)]:border-hairline sm:[&>*:nth-child(-n+2)]:border-b-0 [&>*:nth-child(odd)]:border-r [&>*:nth-child(odd)]:border-hairline sm:[&>*:nth-child(odd)]:border-r-0">
         <StatTile
-          label="Findings"
+          label={t.inspector.findings}
           value={<RollingNumber value={summary.totalFindings} />}
-          hint={`${detectorSplit.regex} signature · ${detectorSplit.entropy} entropy`}
+          hint={t.inspector.findingsHint(detectorSplit.regex, detectorSplit.entropy)}
           accent={
             summary.totalFindings === 0 ? "text-severity-clean" : "text-severity-critical"
           }
         />
         <StatTile
-          label="Analysis"
+          label={t.inspector.analysis}
           value={<SpringNumber value={summary.durationMs} format={formatDuration} />}
-          hint={`${summary.linesScanned} ${pluralize(summary.linesScanned, "line")} scanned`}
+          hint={t.inspector.analysisHint(summary.linesScanned)}
         />
         <StatTile
-          label="Critical"
+          label={t.inspector.critical}
           value={<RollingNumber value={counts.CRITICAL} />}
-          hint={`${counts.HIGH} high · ${counts.MEDIUM} medium`}
+          hint={t.inspector.criticalHint(counts.HIGH, counts.MEDIUM)}
           accent={counts.CRITICAL > 0 ? "text-severity-critical" : "text-content-secondary"}
         />
         <StatTile
-          label="Tokens profiled"
+          label={t.inspector.profiled}
           value={<RollingNumber value={summary.entropyProfile.length} />}
-          hint="candidates measured"
+          hint={t.inspector.profiledHint}
         />
       </div>
 
@@ -393,10 +412,8 @@ export function InspectorPanel({
                   <span className="h-3 w-full rounded-[3px] bg-ink/85" />
                   <span className="h-2 w-32 rounded-full bg-surface-4" />
                 </div>
-                <p className="mt-6 text-[16px] font-semibold text-content-secondary">Nothing to audit yet</p>
-                <p className="mt-1 text-[14px] text-content-tertiary">
-                  Paste a document or load one of the samples to see findings here.
-                </p>
+                <p className="mt-6 text-[16px] font-semibold text-content-secondary">{t.inspector.emptyTitle}</p>
+                <p className="mt-1 text-[14px] text-content-tertiary">{t.inspector.emptyBody}</p>
               </div>
             </motion.div>
           )}
@@ -415,15 +432,13 @@ export function InspectorPanel({
                   initial={{ scale: 0.6, rotate: -12 }}
                   animate={{ scale: 1, rotate: 0 }}
                   transition={{ ...softSpring, delay: 0.05 }}
-                  className="mx-auto grid h-14 w-14 place-items-center rounded-xl bg-severity-clean text-white shadow-raised"
+                  className="mx-auto grid h-14 w-14 place-items-center rounded-xl bg-severity-clean text-white shadow-raised dark:text-on-mark"
                 >
                   <ShieldCheck className="h-7 w-7" aria-hidden />
                 </motion.span>
-                <p className="mt-4 text-[18px] font-bold text-severity-clean">No credentials detected</p>
+                <p className="mt-4 text-[18px] font-bold text-severity-clean">{t.inspector.cleanTitle}</p>
                 <p className="mt-1 text-[14px] text-content-tertiary">
-                  {summary.entropyProfile.length} token
-                  {summary.entropyProfile.length === 1 ? "" : "s"} profiled in{" "}
-                  {formatDuration(summary.durationMs)}.
+                  {t.inspector.cleanBody(summary.entropyProfile.length, formatDuration(summary.durationMs))}
                 </p>
               </div>
             </motion.div>
@@ -460,22 +475,21 @@ export function InspectorPanel({
           >
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 sm:px-5">
               <span className="min-w-0 flex-1 text-[13px] text-content-secondary">
-                <RollingNumber value={ignored.length} className="align-bottom font-bold" /> marked as false{" "}
-                {ignored.length === 1 ? "positive" : "positives"}
+                <RollingNumber value={ignored.length} className="align-bottom font-bold" /> {t.inspector.ignored(ignored.length)}
                 {baselineError !== null && <span className="block text-severity-critical">{baselineError}</span>}
               </span>
               <button type="button" onClick={onRestoreIgnored} className={secondaryButton}>
                 <RotateCcw className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                Restore
+                {t.inspector.restore}
               </button>
               <button
                 type="button"
                 onClick={downloadBaseline}
-                title="A .guardenv-baseline.json the CLI accepts with --baseline (name the file with its path in the repo)"
+                title={t.inspector.baselineTitle}
                 className={secondaryButton}
               >
                 <FileCheck2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                Baseline
+                {t.inspector.baseline}
               </button>
             </div>
           </motion.div>
@@ -485,7 +499,7 @@ export function InspectorPanel({
       <div className="flex flex-wrap items-center gap-2 border-t border-hairline bg-surface-2/60 px-4 py-3 sm:px-5">
         <div
           role="radiogroup"
-          aria-label="Export format"
+          aria-label={t.inspector.exportGroup}
           className="flex rounded-lg border border-hairline bg-surface-1 p-0.5"
         >
           {(["json", "sarif"] as const).map((option) => (
@@ -520,7 +534,7 @@ export function InspectorPanel({
           ) : (
             <ClipboardCopy className="h-3.5 w-3.5 shrink-0" aria-hidden />
           )}
-          <CopyLabel state={copyState} idle="Copy report" error="Copy failed" />
+          <CopyLabel state={copyState} idle={t.inspector.copyReport} error={t.inspector.copyFailed} />
         </button>
 
         <button
@@ -535,7 +549,7 @@ export function InspectorPanel({
           ) : (
             <Braces className="h-3.5 w-3.5 shrink-0" aria-hidden />
           )}
-          <CopyLabel state={mdCopyState} idle="Copy Markdown" />
+          <CopyLabel state={mdCopyState} idle={t.inspector.copyMarkdown} />
         </button>
 
         <button
@@ -543,8 +557,8 @@ export function InspectorPanel({
           onClick={() => { downloadReport(summary, format); }}
           className="hit group ml-auto inline-flex items-center gap-2 rounded-md bg-ink px-3.5 py-1.5 text-[13px] font-semibold text-surface-1 shadow-raised transition-[transform,background-color] duration-150 hover:bg-ink-soft active:scale-[0.96]"
         >
-          <Download className="h-3.5 w-3.5 shrink-0 text-mark transition-transform duration-200 group-hover:translate-y-0.5" aria-hidden />
-          Download .{format === "sarif" ? "sarif" : "json"}
+          <Download className="h-3.5 w-3.5 shrink-0 text-ink-accent transition-transform duration-200 group-hover:translate-y-0.5" aria-hidden />
+          {t.inspector.download(format === "sarif" ? "sarif" : "json")}
         </button>
       </div>
     </motion.section>

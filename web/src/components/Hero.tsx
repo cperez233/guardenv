@@ -7,7 +7,8 @@ import { riskScore } from "@/engine/risk";
 import type { RiskGrade } from "@/engine/risk";
 import { SEVERITY_LEVELS } from "@/engine/types";
 import type { ScanSummary } from "@/engine/types";
-import { SEVERITY_CLASSES, cx, pluralize } from "@/lib/format";
+import { useLang } from "@/i18n/context";
+import { SEVERITY_CLASSES, cx } from "@/lib/format";
 import { ease } from "@/lib/motion";
 import { RollingNumber } from "./Numbers";
 
@@ -15,6 +16,8 @@ interface HeroProps {
   readonly summary: ScanSummary;
   readonly hasInput: boolean;
   readonly filename: string;
+  /** Files touched when the document is a unified diff. */
+  readonly diffFiles: readonly string[] | null;
 }
 
 const LETTERS_A = "Guard".split("");
@@ -65,13 +68,13 @@ function Wordmark(): ReactElement {
           <motion.span
             key={`mark-${take}`}
             aria-hidden
-            className="absolute inset-x-[-0.04em] bottom-[0.1em] top-[0.4em] -z-0 rounded-[0.06em] bg-mark"
+            className="absolute inset-x-[-0.04em] bottom-[0.1em] top-[0.4em] dark:top-[0.16em] -z-0 rounded-[0.06em] bg-mark"
             initial={reduce ? false : { clipPath: "inset(0 100% 0 0)" }}
             animate={{ clipPath: "inset(0 0% 0 0)" }}
             transition={{ duration: 0.55, delay: base + 1.15, ease }}
           />
           {LETTERS_B.map((letter, index) => (
-            <span key={`b-${index}`} className="relative inline-block overflow-hidden">
+            <span key={`b-${index}`} className="relative inline-block overflow-hidden text-on-mark">
               <motion.span
                 className="inline-block"
                 initial={reduce ? false : { y: "105%" }}
@@ -111,14 +114,15 @@ const GRADE_TONE: Readonly<Record<RiskGrade, string>> = {
 
 /** The exposure grade, pressed on the card like an examiner's mark. */
 function GradeMark({ summary, hasInput }: { summary: ScanSummary; hasInput: boolean }): ReactElement {
+  const { t } = useLang();
   const { score, grade } = riskScore(summary);
   return (
-    <div className="flex items-center gap-2.5" title="Exposure grade: every finding costs points by severity; verified tokens cost more">
+    <div className="flex items-center gap-2.5" title={t.hero.riskTitle}>
       <div className="text-right leading-tight">
-        <div className="text-[12px] font-semibold text-content-tertiary">Risk grade</div>
+        <div className="text-[12px] font-semibold text-content-tertiary">{t.hero.riskGrade}</div>
         <div className="font-mono text-[12px] text-content-tertiary">{hasInput ? `${score}/100` : "—"}</div>
       </div>
-      <span className="relative grid h-12 w-12 shrink-0 place-items-center" aria-label={hasInput ? `Risk grade ${grade}, ${score} out of 100` : "No grade"}>
+      <span className="relative grid h-12 w-12 shrink-0 place-items-center" aria-label={hasInput ? t.hero.riskAria(grade, score) : t.hero.noGrade}>
         <AnimatePresence mode="popLayout" initial={false}>
           <motion.span
             key={hasInput ? grade : "none"}
@@ -139,23 +143,29 @@ function GradeMark({ summary, hasInput }: { summary: ScanSummary; hasInput: bool
   );
 }
 
-function Verdict({ summary, hasInput, filename }: HeroProps): ReactElement {
+function Verdict({ summary, hasInput, filename, diffFiles }: HeroProps): ReactElement {
+  const { t } = useLang();
   const total = summary.totalFindings;
   const clean = hasInput && total === 0;
 
   return (
     <motion.aside
       aria-live="polite"
-      aria-label="Scan verdict"
+      aria-label={t.hero.verdict}
       initial={{ opacity: 0, y: 24, rotate: 0.6 }}
       animate={{ opacity: 1, y: 0, rotate: 0 }}
       transition={{ duration: 0.9, delay: 0.5, ease }}
       className="relative w-full rounded-xl bg-surface-1 p-5 shadow-float ring-1 ring-hairline sm:p-6 lg:w-[400px]"
     >
       <div className="flex items-baseline justify-between gap-3">
-        <span className="truncate font-mono text-[13px] text-content-tertiary">{filename || "untitled"}</span>
-        <span className="shrink-0 font-mono text-[13px] text-content-tertiary">
-          {summary.linesScanned} {pluralize(summary.linesScanned, "line")}
+        <span className="truncate font-mono text-[13px] text-content-tertiary">{filename || t.hero.untitled}</span>
+        <span className="flex shrink-0 items-center gap-2 font-mono text-[13px] text-content-tertiary">
+          {diffFiles !== null && (
+            <span className="rounded-[3px] bg-ink px-1.5 py-px text-[11px] font-bold text-surface-1">
+              {t.hero.diff(diffFiles.length)}
+            </span>
+          )}
+          {t.hero.lines(summary.linesScanned)}
         </span>
       </div>
 
@@ -180,7 +190,7 @@ function Verdict({ summary, hasInput, filename }: HeroProps): ReactElement {
               transition={{ type: "spring", stiffness: 520, damping: 22 }}
               className="mb-2 rounded-[4px] border-[3px] border-severity-clean px-2.5 py-0.5 font-display text-[22px] font-[900] uppercase leading-tight tracking-[0.06em] text-severity-clean [font-stretch:115%]"
             >
-              Clean
+              {t.hero.clean}
             </motion.span>
           ) : (
             <motion.span
@@ -191,7 +201,7 @@ function Verdict({ summary, hasInput, filename }: HeroProps): ReactElement {
               transition={{ duration: 0.2, ease }}
               className="pb-1.5 text-[17px] font-semibold leading-tight text-content-secondary"
             >
-              {!hasInput ? "Idle" : pluralize(total, "finding")}
+              {!hasInput ? t.hero.idle : t.hero.findingsWord(total)}
             </motion.span>
           )}
         </AnimatePresence>
@@ -221,7 +231,7 @@ function Verdict({ summary, hasInput, filename }: HeroProps): ReactElement {
             <div key={level} className={cx("min-w-0", count === 0 && "opacity-50")}>
               <dt className="flex items-center gap-1.5 truncate text-[12px] font-semibold capitalize text-content-tertiary">
                 <span className={cx("hidden h-2 w-2 shrink-0 rounded-[2px] min-[400px]:block", SEVERITY_CLASSES[level].dot)} aria-hidden />
-                {level.toLowerCase()}
+                {t.severity[level]}
               </dt>
               <dd className={cx("mt-0.5 font-mono text-[18px] font-bold", count > 0 && SEVERITY_CLASSES[level].text)}>
                 <RollingNumber value={count} />
@@ -234,7 +244,8 @@ function Verdict({ summary, hasInput, filename }: HeroProps): ReactElement {
   );
 }
 
-export function Hero({ summary, hasInput, filename }: HeroProps): ReactElement {
+export function Hero({ summary, hasInput, filename, diffFiles }: HeroProps): ReactElement {
+  const { t } = useLang();
   return (
     <section
       id="top"
@@ -248,10 +259,11 @@ export function Hero({ summary, hasInput, filename }: HeroProps): ReactElement {
           transition={{ duration: 0.8, delay: 0.7, ease }}
           className="mt-4 max-w-[46ch] text-[clamp(1.1rem,2.2vw,1.45rem)] font-medium leading-snug text-content-secondary sm:mt-5"
         >
-          Secret scanner playground · <span className="marker text-content-primary">runs entirely in your browser</span>
+          {t.hero.lead}
+          <span className="marker">{t.hero.leadMark}</span>
         </motion.p>
       </div>
-      <Verdict summary={summary} hasInput={hasInput} filename={filename} />
+      <Verdict summary={summary} hasInput={hasInput} filename={filename} diffFiles={diffFiles} />
     </section>
   );
 }

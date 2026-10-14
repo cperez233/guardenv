@@ -63,12 +63,12 @@ export function envExampleFor(source: string, findings: readonly ScanFinding[]):
 export const PRECOMMIT_CONFIG = `# .pre-commit-config.yaml
 repos:
   - repo: https://github.com/cperez233/guardenv
-    rev: v1.0.0
+    rev: v1.1.0
     hooks:
       - id: guardenv
 `;
 
-export const GITHUB_ACTIONS_STEP = `- run: pip install guardenv
+export const GITHUB_ACTIONS_STEP = `- run: pip install "git+https://github.com/cperez233/guardenv@v1.1.0"
 - run: guardenv scan . --sarif --output guardenv.sarif
   continue-on-error: true
 - uses: github/codeql-action/upload-sarif@v3

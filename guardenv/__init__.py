@@ -16,7 +16,7 @@ from .models import DetectorKind, Finding, ScanError, ScanSummary, Severity
 from .rules import RULES, RULES_BY_ID, RuleDefinition, compile_ruleset, default_ruleset
 from .scanner import Scanner, ScanOptions
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 __all__ = [
     "RULES",

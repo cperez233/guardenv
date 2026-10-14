@@ -16,6 +16,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from .decode import iter_encoded_findings, merge_encoded
 from .entropy import (
     DEFAULT_ENTROPY_CONFIG,
     EntropyConfig,
@@ -284,6 +285,8 @@ class ScanOptions:
     entropy: EntropyConfig = DEFAULT_ENTROPY_CONFIG
     enable_entropy: bool = True
     enable_rules: bool = True
+    #: Decode base64 values and scan the plaintext with the signature rules.
+    decode_base64: bool = True
     excluded_dirs: frozenset[str] = DEFAULT_EXCLUDED_DIRS
     excluded_extensions: frozenset[str] = DEFAULT_EXCLUDED_EXTENSIONS
     excluded_filenames: frozenset[str] = DEFAULT_EXCLUDED_FILENAMES
@@ -501,10 +504,16 @@ class Scanner:
 
     def _detect(self, text: str, path: str) -> Iterator[Finding]:
         options = self.options
+        findings: list[Finding] = []
         if options.enable_rules and options.rules:
-            yield from iter_rule_findings(text, path, options.rules, entropy_fn=shannon_entropy)
+            findings.extend(iter_rule_findings(text, path, options.rules, entropy_fn=shannon_entropy))
         if options.enable_entropy:
-            yield from self._entropy_findings(text, path)
+            findings.extend(self._entropy_findings(text, path))
+        if options.enable_rules and options.rules and options.decode_base64:
+            encoded = list(iter_encoded_findings(text, path, options.rules))
+            if encoded:
+                findings = merge_encoded(deduplicate_findings(findings), encoded)
+        yield from findings
 
     def _entropy_findings(self, text: str, path: str) -> Iterator[Finding]:
         options = self.options

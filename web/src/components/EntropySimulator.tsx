@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactElement, RefObject } from "react";
 
 import type { EntropyResult } from "@/engine/types";
+import { useLang } from "@/i18n/context";
 import { cx } from "@/lib/format";
 import { ease, reveal } from "@/lib/motion";
 import { RollingNumber } from "./Numbers";
@@ -22,15 +23,16 @@ const PLOT_HEIGHT = VIEW.height - VIEW.padTop - VIEW.padBottom;
 const Y_MIN = 0;
 const Y_MAX = 8;
 
+/** Charset hues come from the theme (src/index.css), so they hold up on both sheets. */
 const CHARSET_COLORS: Readonly<Record<string, string>> = {
-  hex: "#1d68ad",
-  base64: "#6a46c9",
-  base64url: "#bf2f73",
-  alphanumeric: "#17774a",
-  mixed: "#9a6400",
+  hex: "rgb(var(--c-cs-hex))",
+  base64: "rgb(var(--c-cs-base64))",
+  base64url: "rgb(var(--c-cs-base64url))",
+  alphanumeric: "rgb(var(--c-cs-alphanumeric))",
+  mixed: "rgb(var(--c-cs-mixed))",
 };
 
-const INK = "#101317";
+const INK = "rgb(var(--c-ink))";
 const MARK = "#e3f24a";
 
 interface EntropySimulatorProps {
@@ -81,6 +83,7 @@ export function EntropySimulator({
   onHeuristicsChange,
   onSelectToken,
 }: EntropySimulatorProps): ReactElement {
+  const { t } = useLang();
   const [frameRef, frameWidth] = useWidth<HTMLDivElement>(900);
   const width = Math.max(MIN_WIDTH, frameWidth);
   const plotWidth = width - VIEW.padLeft - VIEW.padRight;
@@ -97,7 +100,7 @@ export function EntropySimulator({
         key: `${result.line}:${result.column}:${index}`,
         cx: VIEW.padLeft + ratio * plotWidth,
         cy: yFor(result.entropy),
-        color: CHARSET_COLORS[result.charset] ?? "#5e6670",
+        color: CHARSET_COLORS[result.charset] ?? "rgb(var(--c-sev-info))",
         result,
         above,
         // Above the line but rejected by a structural heuristic: the reader
@@ -115,17 +118,18 @@ export function EntropySimulator({
   return (
     <motion.section
       {...reveal}
-      aria-label="Entropy simulator"
+      aria-label={t.entropy.title}
       className="overflow-hidden rounded-xl bg-surface-1 shadow-raised ring-1 ring-hairline"
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-hairline px-4 py-3 sm:px-5">
         <Sigma className="h-4 w-4 shrink-0 text-content-tertiary" aria-hidden />
         <h2 className="font-display text-[17px] font-[750] tracking-[-0.01em] [font-stretch:110%]">
-          Entropy simulator
+          {t.entropy.title}
         </h2>
         <span className="font-mono text-[12px] text-content-tertiary">
-          {profile.length} tokens · <RollingNumber value={flagged} className="align-bottom" /> above threshold
-          {suppressed > 0 && ` · ${suppressed} suppressed`}
+          {t.entropy.summary(profile.length)}
+          <RollingNumber value={flagged} className="align-bottom" /> {t.entropy.above}
+          {suppressed > 0 && t.entropy.suppressed(suppressed)}
         </span>
         <label className="group flex w-full cursor-pointer sm:ml-auto sm:w-auto select-none items-center gap-2.5 py-1 text-[14px] font-medium text-content-secondary">
           <input
@@ -151,7 +155,7 @@ export function EntropySimulator({
               )}
             />
           </span>
-          Suppress benign shapes
+          {t.entropy.heuristics}
         </label>
       </div>
 
@@ -161,7 +165,7 @@ export function EntropySimulator({
             htmlFor="guardenv-threshold"
             className="sr-only text-[13px] font-semibold text-content-secondary sm:not-sr-only sm:shrink-0"
           >
-            Shannon threshold
+            {t.entropy.threshold}
           </label>
           <input
             id="guardenv-threshold"
@@ -173,20 +177,20 @@ export function EntropySimulator({
             onChange={(event) => { onThresholdChange(Number(event.target.value)); }}
             className="ruler min-w-0 flex-1 cursor-pointer"
             style={{ ["--fill" as string]: `${fill}%` }}
-            aria-valuetext={`${threshold.toFixed(2)} bits per character`}
+            aria-valuetext={t.entropy.valueText(threshold.toFixed(2))}
           />
           <output
             htmlFor="guardenv-threshold"
-            className="w-[4.5rem] shrink-0 rounded-md bg-ink px-2 py-1 text-center font-mono text-[15px] font-bold tabular-nums text-mark"
+            className="w-[4.5rem] shrink-0 rounded-md bg-ink px-2 py-1 text-center font-mono text-[15px] font-bold tabular-nums text-ink-accent"
           >
             {threshold.toFixed(2)}
           </output>
         </div>
 
         <div className="mt-1.5 flex justify-between gap-2 whitespace-nowrap font-mono text-[12px] text-content-tertiary">
-          <span>{MIN_THRESHOLD.toFixed(1)} · permissive</span>
-          <span className="hidden sm:inline">bits / character</span>
-          <span>{MAX_THRESHOLD.toFixed(1)} · strict</span>
+          <span>{MIN_THRESHOLD.toFixed(1)} · {t.entropy.permissive}</span>
+          <span className="hidden sm:inline">{t.entropy.unit}</span>
+          <span>{MAX_THRESHOLD.toFixed(1)} · {t.entropy.strict}</span>
         </div>
 
         <div ref={frameRef} className="mt-4 overflow-x-auto [overscroll-behavior-x:contain]">
@@ -196,7 +200,7 @@ export function EntropySimulator({
             height={VIEW.height}
             className="block"
             role="img"
-            aria-label={`Entropy of ${profile.length} tokens against a threshold of ${threshold.toFixed(2)} bits per character`}
+            aria-label={t.entropy.chartLabel(profile.length, threshold.toFixed(2))}
           >
             {/* The band above the threshold is the highlighter: what lands there is evidence. */}
             <motion.rect
@@ -207,7 +211,7 @@ export function EntropySimulator({
               animate={{ height: Math.max(0, thresholdY - VIEW.padTop) }}
               transition={{ type: "spring", stiffness: 500, damping: 40 }}
               fill={MARK}
-              opacity={0.32}
+              style={{ opacity: "calc(var(--mark-line) * 0.7)" }}
               rx={3}
             />
 
@@ -218,14 +222,14 @@ export function EntropySimulator({
                   x2={width - VIEW.padRight}
                   y1={yFor(tick)}
                   y2={yFor(tick)}
-                  stroke="#cfd4da"
+                  className="stroke-hairline"
                   strokeWidth={1}
                 />
                 <text
                   x={VIEW.padLeft - 8}
                   y={yFor(tick) + 4}
                   textAnchor="end"
-                  fill="#565e68"
+                  className="fill-content-tertiary"
                   fontSize={11}
                   fontFamily="'JetBrains Mono', ui-monospace, monospace"
                 >
@@ -245,15 +249,14 @@ export function EntropySimulator({
                   initial={{ r: 0, opacity: 0 }}
                   animate={{ r: hot ? 6 : 4, opacity: hot ? 1 : 0.75 }}
                   transition={{ duration: 0.45, delay: Math.min(index * 0.03, 0.6), ease }}
-                  fill={hot ? point.color : "#f4f5f7"}
-                  stroke={hot ? INK : point.color}
+                  style={{ fill: hot ? point.color : "rgb(var(--c-surface-1))", stroke: hot ? INK : point.color }}
                   strokeWidth={hot ? 1.5 : 1.6}
                   strokeDasharray={point.suppressed ? "2 2" : undefined}
                   className="cursor-pointer outline-none transition-[stroke-width] duration-150 hover:[stroke-width:3px]"
                   onClick={() => { onSelectToken(point.result.line); }}
                 >
                   <title>
-                    {`line ${point.result.line} · ${point.result.charset} · ${point.result.entropy.toFixed(2)} bits/char · ${point.result.reason}`}
+                    {t.entropy.point(point.result.line, point.result.charset, point.result.entropy.toFixed(2), point.result.reason)}
                   </title>
                 </motion.circle>
               );
@@ -269,32 +272,33 @@ export function EntropySimulator({
                 x2={width - VIEW.padRight}
                 y1={0}
                 y2={0}
-                stroke={INK}
+                style={{ stroke: INK }}
                 strokeWidth={1.5}
                 strokeDasharray="6 4"
               />
-              <rect x={width - VIEW.padRight - 108} y={-21} width={108} height={17} rx={3} fill={INK} />
+              <rect x={width - VIEW.padRight - 108} y={-21} width={108} height={17} rx={3} style={{ fill: INK }} />
               <text
                 x={width - VIEW.padRight - 54}
                 y={-9}
                 textAnchor="middle"
                 fill={MARK}
+                style={{ fill: "rgb(var(--c-ink-accent))" }}
                 fontSize={11}
                 fontWeight={700}
                 fontFamily="'JetBrains Mono', ui-monospace, monospace"
               >
-                threshold {threshold.toFixed(2)}
+                {t.entropy.thresholdTag} {threshold.toFixed(2)}
               </text>
             </motion.g>
 
             <text
               x={VIEW.padLeft}
               y={VIEW.height - 8}
-              fill="#565e68"
+              className="fill-content-tertiary"
               fontSize={11}
               fontFamily="'JetBrains Mono', ui-monospace, monospace"
             >
-              tokens in document order
+              {t.entropy.axis}
             </text>
           </svg>
         </div>
@@ -318,7 +322,7 @@ export function EntropySimulator({
               className="h-2.5 w-2.5 shrink-0 rounded-full border border-dashed border-content-tertiary"
               aria-hidden
             />
-            suppressed by heuristics
+            {t.entropy.suppressedLegend}
           </span>
         </div>
 
@@ -330,7 +334,7 @@ export function EntropySimulator({
             )}
           >
             <Activity className="h-4 w-4 shrink-0" aria-hidden />
-            No candidate tokens yet. Paste a document with strings of 20 characters or more.
+            {t.entropy.empty}
           </p>
         )}
       </div>

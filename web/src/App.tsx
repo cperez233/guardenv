@@ -5,6 +5,7 @@ import type { ReactElement } from "react";
 
 import { EditorPanel } from "@/components/EditorPanel";
 import { EntropySimulator } from "@/components/EntropySimulator";
+import { FolderPanel } from "@/components/FolderPanel";
 import { Header } from "@/components/Header";
 import { Hero } from "@/components/Hero";
 import { InspectorPanel } from "@/components/InspectorPanel";
@@ -13,17 +14,46 @@ import { redactDocument } from "@/engine/redact";
 import { withFindings } from "@/engine/summary";
 import type { ScanFinding } from "@/engine/types";
 import { useScanner } from "@/hooks/useScanner";
+import { useLang } from "@/i18n/context";
+import type { FolderFile, FolderRead } from "@/lib/folder";
 import { ease } from "@/lib/motion";
-import { DEFAULT_SAMPLE } from "@/lib/samples";
+import { DEFAULT_SAMPLE, SAMPLE_DOCUMENTS } from "@/lib/samples";
+import { readShareState, writeShareState } from "@/lib/shareState";
 import { invisibleSignature } from "@/lib/signature";
 
 const REPOSITORY_URL = "https://github.com/cperez233/guardenv";
 
 export default function App(): ReactElement {
+  const { t } = useLang();
+  // A shared link reopens the same settings and sample; never pasted text.
+  const [shared] = useState(() => readShareState(window.location.hash));
+  const initialSample = SAMPLE_DOCUMENTS.find((doc) => doc.id === shared.sample) ?? DEFAULT_SAMPLE;
   const scanner = useScanner({
-    initialSource: DEFAULT_SAMPLE.content,
-    initialFilename: DEFAULT_SAMPLE.filename,
+    initialSource: initialSample.content,
+    initialFilename: initialSample.filename,
+    ...(shared.threshold !== undefined && { initialThreshold: shared.threshold }),
+    ...(shared.mode !== undefined && { initialMode: shared.mode }),
+    ...(shared.minSeverity !== undefined && { initialMinSeverity: shared.minSeverity }),
+    ...(shared.heuristics !== undefined && { initialHeuristics: shared.heuristics }),
+    ...(shared.decode !== undefined && { initialDecode: shared.decode }),
   });
+
+  const sampleId = SAMPLE_DOCUMENTS.find((doc) => doc.content === scanner.source)?.id ?? null;
+  useEffect(() => {
+    const hash = writeShareState({
+      mode: scanner.mode,
+      threshold: scanner.threshold,
+      minSeverity: scanner.minSeverity,
+      heuristics: scanner.useHeuristics,
+      decode: scanner.decodeEncoded,
+      sample: sampleId,
+    });
+    const { pathname, search } = window.location;
+    window.history.replaceState(window.history.state, "", `${pathname}${search}${hash}`);
+  }, [scanner.mode, scanner.threshold, scanner.minSeverity, scanner.useHeuristics, scanner.decodeEncoded, sampleId]);
+
+  // A scanned folder: its files, and which one is open in the editor.
+  const [folder, setFolder] = useState<FolderRead | null>(null);
 
   const [activeFinding, setActiveFinding] = useState<ScanFinding | null>(null);
   const [activeLine, setActiveLine] = useState<number | null>(null);
@@ -39,6 +69,17 @@ export default function App(): ReactElement {
   }, []);
 
   const hasInput = scanner.source.trim().length > 0;
+
+  const settings = useMemo(
+    () => ({
+      threshold: scanner.threshold,
+      mode: scanner.mode,
+      useHeuristics: scanner.useHeuristics,
+      minSeverity: scanner.minSeverity,
+      decodeEncoded: scanner.decodeEncoded,
+    }),
+    [scanner.threshold, scanner.mode, scanner.useHeuristics, scanner.minSeverity, scanner.decodeEncoded],
+  );
 
   // Findings acknowledged as false positives: hidden everywhere, kept for the baseline.
   const [ignoredIds, setIgnoredIds] = useState<ReadonlySet<string>>(() => new Set());
@@ -128,9 +169,24 @@ export default function App(): ReactElement {
           repositoryUrl={REPOSITORY_URL}
         />
 
-        <Hero summary={summary} hasInput={hasInput} filename={scanner.filename} />
+        <Hero summary={summary} hasInput={hasInput} filename={scanner.filename} diffFiles={scanner.diffFiles} />
 
         <main className="mx-auto flex max-w-[1600px] flex-col gap-5 px-4 pb-4 sm:px-6 lg:gap-6 lg:px-10">
+          {folder !== null && (
+            <FolderPanel
+              folder={folder}
+              settings={settings}
+              activePath={scanner.filename}
+              onOpen={(file: FolderFile) => {
+                setActiveFinding(null);
+                setActiveLine(null);
+                setRedaction(null);
+                scanner.loadSample(file.content, file.path);
+              }}
+              onClose={() => { setFolder(null); }}
+            />
+          )}
+
           <div className="grid gap-5 lg:gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
             <EditorPanel
               source={scanner.source}
@@ -155,6 +211,8 @@ export default function App(): ReactElement {
               onRedact={redact}
               redaction={redaction}
               onUndoRedaction={undoRedaction}
+              onLoadFolder={(read: FolderRead) => { setFolder(read); }}
+              diffFiles={scanner.diffFiles}
             />
 
             <InspectorPanel
@@ -186,9 +244,9 @@ export default function App(): ReactElement {
           <footer className="mt-6 border-t border-hairline pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-8 sm:mt-10 sm:pt-10">
             <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
               <p className="max-w-[46ch] text-[clamp(1.05rem,1.8vw,1.3rem)] font-medium leading-snug text-content-secondary">
-                GuardEnv playground · every byte you paste{" "}
+                {t.footer.lead}
                 <span className="relative inline-block">
-                  stays in this tab
+                  {t.footer.mark}
                   {/* The motif signs off: a redaction bar that settles under the promise. */}
                   <motion.span
                     aria-hidden
@@ -199,7 +257,7 @@ export default function App(): ReactElement {
                     transition={{ duration: 0.8, delay: 0.2, ease }}
                   />
                 </span>
-                . No upload, no telemetry.
+                {t.footer.tail}
               </p>
               <a
                 href={`${REPOSITORY_URL}#quick-start`}
@@ -207,14 +265,14 @@ export default function App(): ReactElement {
                 rel="noreferrer noopener"
                 className="group inline-flex shrink-0 items-center gap-2.5 self-start rounded-md bg-ink px-4 py-3 text-[15px] font-semibold text-surface-1 shadow-raised transition-[transform,background-color] duration-150 hover:bg-ink-soft active:scale-[0.97] md:self-auto"
               >
-                Run the same engine in CI
-                <span className="text-mark transition-transform duration-200 group-hover:translate-x-1" aria-hidden>
+                {t.footer.ci}
+                <span className="text-ink-accent transition-transform duration-200 group-hover:translate-x-1" aria-hidden>
                   →
                 </span>
               </a>
             </div>
             <p className="mt-10 text-[12px] text-content-faint">
-              Built with care by{" "}
+              {t.footer.credit}{" "}
               <a
                 href="https://cristianperez.me"
                 target="_blank"

@@ -4,8 +4,80 @@
 @tailwind utilities;
 
 @layer base {
+  /* Colour tokens as RGB triplets, so Tailwind's opacity modifiers keep working. */
   :root {
     color-scheme: light;
+    --c-surface-0: 230 232 235;
+    --c-surface-1: 244 245 247;
+    --c-surface-2: 236 238 241;
+    --c-surface-3: 225 228 232;
+    --c-surface-4: 213 217 222;
+    --c-hairline: 207 212 218;
+    --c-hairline-strong: 167 174 183;
+    --c-content-primary: 16 19 23;
+    --c-content-secondary: 54 61 70;
+    --c-content-tertiary: 86 94 104;
+    --c-content-faint: 115 123 133;
+    --c-ink: 16 19 23;
+    --c-ink-soft: 28 33 40;
+    --c-ink-accent: 227 242 74;
+    --c-sev-critical: 196 32 51;
+    --c-sev-high: 207 74 23;
+    --c-sev-medium: 154 100 0;
+    --c-sev-low: 29 104 173;
+    --c-sev-info: 94 102 112;
+    --c-sev-clean: 23 119 74;
+    --c-cs-hex: 29 104 173;
+    --c-cs-base64: 106 70 201;
+    --c-cs-base64url: 191 47 115;
+    --c-cs-alphanumeric: 23 119 74;
+    --c-cs-mixed: 154 100 0;
+    --c-shadow: 16 19 23;
+    --c-dot: 16 19 23;
+    --dot-alpha: 0.035;
+    --c-dot-light: 255 255 255;
+    --dot-light-alpha: 0.5;
+    --mark-line: 0.45;
+    --mark-line-active: 1;
+  }
+
+  /* The dark sheet: graphite paper, the ink turns to chalk. */
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --c-surface-0: 14 17 21;
+    --c-surface-1: 22 26 32;
+    --c-surface-2: 28 33 40;
+    --c-surface-3: 36 42 51;
+    --c-surface-4: 48 56 67;
+    --c-hairline: 42 49 59;
+    --c-hairline-strong: 74 84 97;
+    --c-content-primary: 234 237 241;
+    --c-content-secondary: 190 198 207;
+    --c-content-tertiary: 146 155 166;
+    --c-content-faint: 112 121 133;
+    --c-ink: 238 241 244;
+    --c-ink-soft: 212 218 225;
+    --c-ink-accent: 74 88 0;
+    --c-sev-critical: 255 99 117;
+    --c-sev-high: 255 133 82;
+    --c-sev-medium: 230 172 66;
+    --c-sev-low: 102 171 255;
+    --c-sev-info: 160 169 180;
+    --c-sev-clean: 64 204 140;
+    --c-cs-hex: 102 171 255;
+    --c-cs-base64: 167 139 250;
+    --c-cs-base64url: 244 114 182;
+    --c-cs-alphanumeric: 64 204 140;
+    --c-cs-mixed: 230 172 66;
+    --c-shadow: 0 0 0;
+    --shadow-strength: 0.55;
+    --shadow-float: 0.7;
+    --c-dot: 255 255 255;
+    --dot-alpha: 0.03;
+    --c-dot-light: 0 0 0;
+    --dot-light-alpha: 0.35;
+    --mark-line: 0.22;
+    --mark-line-active: 0.42;
   }
 
   html {
@@ -25,10 +97,11 @@
 
   body {
     @apply bg-surface-0 font-sans text-content-primary antialiased;
+    transition: background-color 300ms ease, color 300ms ease;
     /* Barely-there paper tooth: two offset dot grids, static, never animated. */
     background-image:
-      radial-gradient(rgb(16 19 23 / 0.035) 1px, transparent 1px),
-      radial-gradient(rgb(255 255 255 / 0.5) 1px, transparent 1px);
+      radial-gradient(rgb(var(--c-dot) / var(--dot-alpha)) 1px, transparent 1px),
+      radial-gradient(rgb(var(--c-dot-light) / var(--dot-light-alpha)) 1px, transparent 1px);
     background-size: 22px 22px, 22px 22px;
     background-position: 0 0, 11px 11px;
   }
@@ -43,7 +116,7 @@
   /* Hairline scrollbars, so the panels keep their density. */
   * {
     scrollbar-width: thin;
-    scrollbar-color: #a7aeb7 transparent;
+    scrollbar-color: rgb(var(--c-hairline-strong)) transparent;
   }
 
   *::-webkit-scrollbar {
@@ -56,14 +129,14 @@
   }
 
   *::-webkit-scrollbar-thumb {
-    background-color: #a7aeb7;
+    background-color: rgb(var(--c-hairline-strong));
     border: 3px solid transparent;
     background-clip: content-box;
     border-radius: 9999px;
   }
 
   *::-webkit-scrollbar-thumb:hover {
-    background-color: #737b85;
+    background-color: rgb(var(--c-content-faint));
   }
 
   :focus-visible {
@@ -76,8 +149,10 @@
 }
 
 @layer components {
-  /* A highlighter stroke behind text: slightly lifted, ragged ends. */
+  /* A highlighter stroke behind text: slightly lifted, ragged ends. Text on it
+     stays dark in both themes. */
   .marker {
+    color: theme("colors.on-mark");
     background-image: linear-gradient(
       100deg,
       transparent 0.2em,
@@ -90,6 +165,13 @@
     background-position: 0 72%;
     box-decoration-break: clone;
     -webkit-box-decoration-break: clone;
+  }
+
+  /* On the dark sheet the stroke covers the full line, so dark text never sits
+     half on the highlighter and half on graphite. */
+  :root[data-theme="dark"] .marker {
+    background-size: 100% 100%;
+    background-position: 0 0;
   }
 
   /* Grow only the tappable area of a compact control (≥ 44px). */
@@ -114,19 +196,19 @@
     border-radius: 2px;
     background: linear-gradient(
       to right,
-      theme("colors.ink.DEFAULT") 0 var(--fill, 50%),
-      theme("colors.surface.4") var(--fill, 50%) 100%
+      rgb(var(--c-ink)) 0 var(--fill, 50%),
+      rgb(var(--c-surface-4)) var(--fill, 50%) 100%
     );
   }
   input[type="range"].ruler::-moz-range-track {
     height: 4px;
     border-radius: 2px;
-    background: theme("colors.surface.4");
+    background: rgb(var(--c-surface-4));
   }
   input[type="range"].ruler::-moz-range-progress {
     height: 4px;
     border-radius: 2px;
-    background: theme("colors.ink.DEFAULT");
+    background: rgb(var(--c-ink));
   }
   input[type="range"].ruler::-webkit-slider-thumb {
     -webkit-appearance: none;
@@ -135,9 +217,9 @@
     height: 24px;
     width: 34px;
     border-radius: 4px;
-    background: theme("colors.ink.DEFAULT");
+    background: rgb(var(--c-ink));
     border: 3px solid theme("colors.mark.DEFAULT");
-    box-shadow: 0 6px 16px -6px rgb(16 19 23 / 0.5);
+    box-shadow: 0 6px 16px -6px rgb(var(--c-shadow) / 0.5);
     cursor: grab;
     transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
   }
@@ -149,9 +231,9 @@
     height: 18px;
     width: 28px;
     border-radius: 4px;
-    background: theme("colors.ink.DEFAULT");
+    background: rgb(var(--c-ink));
     border: 3px solid theme("colors.mark.DEFAULT");
-    box-shadow: 0 6px 16px -6px rgb(16 19 23 / 0.5);
+    box-shadow: 0 6px 16px -6px rgb(var(--c-shadow) / 0.5);
     cursor: grab;
   }
 }
@@ -160,4 +242,17 @@
   [class*="anim-"] {
     animation: none !important;
   }
+}
+
+/* A theme switch is one coordinated transition across every surface. */
+html.theme-switching,
+html.theme-switching *,
+html.theme-switching *::before,
+html.theme-switching *::after {
+  transition:
+    background-color 320ms ease,
+    border-color 320ms ease,
+    color 320ms ease,
+    fill 320ms ease,
+    stroke 320ms ease !important;
 }

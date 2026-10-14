@@ -9,12 +9,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { findEncodedSecrets, mergeEncoded } from "@/engine/decode";
-import { scanText } from "@/engine/scanner";
-import { withFindings } from "@/engine/summary";
-import { EMPTY_SUMMARY, type ScanSummary, type SeverityLevel } from "@/engine/types";
+import { looksLikeDiff, parseDiff } from "@/engine/diff";
+import { scanDocument } from "@/engine/pipeline";
+import type { AnalysisMode } from "@/engine/pipeline";
+import type { ScanSummary, SeverityLevel } from "@/engine/types";
 
-export type AnalysisMode = "combined" | "rules" | "entropy";
+export type { AnalysisMode };
 
 export interface ScannerState {
   readonly source: string;
@@ -28,6 +28,8 @@ export interface ScannerState {
 
 export interface ScannerApi extends ScannerState {
   readonly summary: ScanSummary;
+  /** Files touched by the document when it is a unified diff, else null. */
+  readonly diffFiles: readonly string[] | null;
   readonly isScanning: boolean;
   setSource: (value: string) => void;
   setFilename: (value: string) => void;
@@ -46,17 +48,21 @@ export interface UseScannerOptions {
   readonly initialSource: string;
   readonly initialFilename: string;
   readonly initialThreshold?: number;
+  readonly initialMode?: AnalysisMode;
+  readonly initialMinSeverity?: SeverityLevel;
+  readonly initialHeuristics?: boolean;
+  readonly initialDecode?: boolean;
 }
 
 export function useScanner(options: UseScannerOptions): ScannerApi {
   const [source, setSource] = useState(options.initialSource);
   const [filename, setFilename] = useState(options.initialFilename);
   const [threshold, setThreshold] = useState(options.initialThreshold ?? 4.5);
-  const [mode, setMode] = useState<AnalysisMode>("combined");
-  const [useHeuristics, setUseHeuristics] = useState(true);
-  const [minSeverity, setMinSeverity] = useState<SeverityLevel>("INFO");
+  const [mode, setMode] = useState<AnalysisMode>(options.initialMode ?? "combined");
+  const [useHeuristics, setUseHeuristics] = useState(options.initialHeuristics ?? true);
+  const [minSeverity, setMinSeverity] = useState<SeverityLevel>(options.initialMinSeverity ?? "INFO");
   // Decode base64 values and scan the plaintext too (a playground-only pass).
-  const [decodeEncoded, setDecodeEncoded] = useState(true);
+  const [decodeEncoded, setDecodeEncoded] = useState(options.initialDecode ?? true);
 
   // `debounced` trails `source`; every other input applies immediately because
   // moving the slider should feel like a live control, not a delayed one.
@@ -77,20 +83,15 @@ export function useScanner(options: UseScannerOptions): ScannerApi {
     };
   }, [source, debounced]);
 
-  const summary = useMemo<ScanSummary>(() => {
-    if (debounced.trim().length === 0) return EMPTY_SUMMARY;
-    const base = scanText(debounced, {
-      path: filename,
-      entropyThreshold: threshold,
-      enableRules: mode !== "entropy",
-      enableEntropy: mode !== "rules",
-      useHeuristics,
-      minSeverity,
-    });
-    if (!decodeEncoded || mode === "entropy") return base;
-    const encoded = findEncodedSecrets(debounced, filename, minSeverity);
-    return encoded.length === 0 ? base : withFindings(base, mergeEncoded(base.findings, encoded));
-  }, [debounced, filename, threshold, mode, useHeuristics, minSeverity, decodeEncoded]);
+  const summary = useMemo<ScanSummary>(
+    () => scanDocument(debounced, filename, { threshold, mode, useHeuristics, minSeverity, decodeEncoded }),
+    [debounced, filename, threshold, mode, useHeuristics, minSeverity, decodeEncoded],
+  );
+
+  const diffFiles = useMemo(
+    () => (looksLikeDiff(debounced) ? parseDiff(debounced).fileNames : null),
+    [debounced],
+  );
 
   const loadSample = useCallback((content: string, name: string) => {
     window.clearTimeout(timer.current);
@@ -116,6 +117,7 @@ export function useScanner(options: UseScannerOptions): ScannerApi {
     minSeverity,
     decodeEncoded,
     summary,
+    diffFiles,
     isScanning,
     setSource,
     setFilename,

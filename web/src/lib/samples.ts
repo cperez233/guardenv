@@ -126,6 +126,29 @@ data:
   DATABASE_URL: ${b64(LEAKY_ENV.match(/postgresql:\/\/\S+/)?.[0] ?? "")}
 `;
 
+const DIFF_PATCH = `diff --git a/config/settings.py b/config/settings.py
+index 3b18e51..a9c4f02 100644
+--- a/config/settings.py
++++ b/config/settings.py
+@@ -1,7 +1,7 @@
+ import os
+
+-STRIPE_SECRET_KEY = "${LEAKY_ENV.match(/sk_live_[0-9A-Za-z]+/)?.[0] ?? ""}"
++STRIPE_SECRET_KEY = os.environ["STRIPE_SECRET_KEY"]
+ DEBUG = False
+-DATABASE_URL = "${LEAKY_ENV.match(/postgresql:\/\/\S+/)?.[0] ?? ""}"
++DATABASE_URL = os.environ["DATABASE_URL"]
+diff --git a/.env.production b/.env.production
+new file mode 100644
+index 0000000..5f1d2c3
+--- /dev/null
++++ b/.env.production
+@@ -0,0 +1,3 @@
++APP_ENV=production
++AWS_ACCESS_KEY_ID=${LEAKY_ENV.match(/AKIA[0-9A-Z]{16}/)?.[0] ?? ""}
++SESSION_SECRET=${LEAKY_ENV.match(/SESSION_SECRET=(\S+)/)?.[1] ?? ""}
+`;
+
 export const SAMPLE_DOCUMENTS: readonly SampleDocument[] = [
   {
     id: "env",
@@ -154,6 +177,13 @@ export const SAMPLE_DOCUMENTS: readonly SampleDocument[] = [
     filename: "secret.yaml",
     description: "A Kubernetes Secret whose credentials are only base64-encoded.",
     content: K8S_SECRET,
+  },
+  {
+    id: "diff",
+    label: "fix.diff",
+    filename: "fix.diff",
+    description: "A git diff that moves secrets to the environment and adds a .env.production by mistake.",
+    content: DIFF_PATCH,
   },
   {
     id: "clean",

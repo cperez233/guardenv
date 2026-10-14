@@ -122,6 +122,9 @@ def scan(  # noqa: PLR0915 - a CLI entry point is allowed to be wide
     ),
     no_entropy: bool = typer.Option(False, "--no-entropy", help="Disable the entropy detector."),
     no_rules: bool = typer.Option(False, "--no-rules", help="Disable the regex detector."),
+    no_decode: bool = typer.Option(
+        False, "--no-decode", help="Do not decode base64 values to look for credentials inside them."
+    ),
     no_heuristics: bool = typer.Option(
         False, "--no-heuristics", help="Disable benign-shape suppression in the entropy detector."
     ),
@@ -199,6 +202,7 @@ def scan(  # noqa: PLR0915 - a CLI entry point is allowed to be wide
         entropy=entropy_config,
         enable_entropy=not no_entropy,
         enable_rules=not no_rules,
+        decode_base64=not no_decode,
         excluded_dirs=DEFAULT_EXCLUDED_DIRS | set(exclude_dir or ()),
         include_globs=tuple(include or ()),
         exclude_globs=tuple(exclude or ()),

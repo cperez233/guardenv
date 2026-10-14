@@ -27,7 +27,7 @@ Two detectors run side by side:
 
 | Detector | Answers | Strength | Weakness |
 | --- | --- | --- | --- |
-| **Signatures** (48 regex rules) | *"Is this a Stripe live key?"* | Names the credential type and the provider; near-zero false positives | Only finds credentials it has a pattern for |
+| **Signatures** (52 regex rules) | *"Is this a Stripe live key?"* | Names the credential type and the provider; near-zero false positives | Only finds credentials it has a pattern for |
 | **Entropy** (Shannon, per charset) | *"Is this string too random to be code?"* | Catches bespoke and unknown token formats | Noisy on its own — hashes, UUIDs and minified code all score high |
 
 The interesting engineering is in making the second one usable. Raw entropy flags every lockfile hash and base64 image in a repository. GuardEnv runs a set of cheap structural heuristics *before* the threshold comparison — UUIDs, ISO timestamps, semver, file paths, hostnames, SRI hashes, word-like identifiers, low-variety strings and documentation placeholders are all recognised and dropped. When both detectors fire on the same bytes, the more specific finding wins, so a report never says "high entropy string" about something it could have called "AWS access key".
@@ -39,14 +39,17 @@ The interesting engineering is in making the second one usable. Raw entropy flag
 ### CLI
 
 ```bash
-pip install guardenv
+pip install "git+https://github.com/cperez233/guardenv@v1.1.0"
 ```
+
+Each tagged release also attaches the wheel and sdist to its [GitHub release](https://github.com/cperez233/guardenv/releases). The PyPI package (`pip install guardenv`) follows once the release workflow's PyPI step is enabled — see [Releasing](#releasing).
 
 ```bash
 guardenv scan .                       # scan the working tree
 guardenv scan src/ --fail-on HIGH     # only HIGH+ fails the run
 guardenv scan --stdin < config.yaml   # scan a stream
 git diff --cached | guardenv scan --stdin --stdin-name staged.diff
+guardenv scan k8s/ --no-decode        # skip the base64 pass
 ```
 
 ```
@@ -75,7 +78,7 @@ The image is a two-stage Alpine build that ships only a virtualenv and runs as a
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/cperez233/guardenv
-    rev: v1.0.0
+    rev: v1.1.0
     hooks:
       - id: guardenv
 ```
@@ -85,7 +88,7 @@ Four hook ids are provided: `guardenv` (staged files, fails on `MEDIUM`+), `guar
 ### GitHub Actions
 
 ```yaml
-- run: pip install guardenv
+- run: pip install "git+https://github.com/cperez233/guardenv@v1.1.0"
 - run: guardenv scan . --sarif --output guardenv.sarif
   continue-on-error: true
 - uses: github/codeql-action/upload-sarif@v3
@@ -113,7 +116,7 @@ flowchart TB
         WALK["scanner.py<br/><i>traversal · gitignore · binary sniff · encoding fallback</i>"]
         subgraph detectors ["Detectors"]
             direction LR
-            RULES["rules.py<br/><i>48 signatures<br/>two-stage keyword prefilter</i>"]
+            RULES["rules.py<br/><i>52 signatures<br/>two-stage keyword prefilter</i>"]
             ENT["entropy.py<br/><i>Shannon per charset<br/>benign-shape heuristics</i>"]
         end
         DEDUP["deduplicate_findings()<br/><i>specific rule &gt; generic rule &gt; entropy</i>"]
@@ -145,7 +148,7 @@ guardenv/
 ├── guardenv/
 │   ├── models.py       Severity ladder, Finding, ScanSummary, redaction, fingerprints
 │   ├── entropy.py      Shannon kernel, charset classification, benign-shape heuristics
-│   ├── rules.py        48 signatures, keyword index, checksum validators, deduplication
+│   ├── rules.py        52 signatures, keyword index, checksum validators, deduplication
 │   ├── scanner.py      Traversal, .gitignore subset, binary sniffing, encoding fallback
 │   ├── reporters.py    rich tables, JSON, SARIF 2.1.0, GitHub annotations
 │   ├── baseline.py     Acknowledge existing findings so CI only fails on new ones
@@ -174,13 +177,17 @@ cd web && npm install && npm run dev
 - **Entropy simulator** — a slider over the Shannon threshold (3.0 → 6.0) with a scatter plot of every candidate token in the document. Tokens above the line are flagged; tokens drawn with a dashed outline cleared the threshold but were dropped by a heuristic, so you can see *why* something was not reported.
 - **Analysis modes** — signatures only, entropy only, or both.
 - **Export** — copy or download the report as GuardEnv JSON or SARIF 2.1.0, byte-compatible with what the CLI emits.
-- **Encoded secrets** — base64 values (Kubernetes Secrets, Docker auth, "obfuscated" constants) are decoded and scanned too, and reported at the position of the encoded value. A playground-only pass, switchable from the inspector.
+- **Diff mode** — paste a `git diff` or a PR patch: findings are attributed to the file each hunk touches, added lines are reported as new leaks, and secrets on removed lines are flagged as *still in history*, because deleting a line does not un-leak it.
+- **Folder scan** — drop or pick a folder; every text file is read and scanned in the tab (dependency and build directories, binaries and files over 2 MB are skipped) and listed worst-first.
+- **Encoded secrets** — base64 values (Kubernetes Secrets, Docker auth, "obfuscated" constants) are decoded and scanned too, and reported at the position of the encoded value. The CLI runs the same pass (`--no-decode` turns it off); in the playground it is a switch in the inspector.
 - **Risk grade** — an A–F exposure grade per document; any CRITICAL caps it at D, any HIGH at C, and checksum-verified tokens cost extra.
 - **How to fix** — selecting a finding opens provider-specific revocation steps and a link to the console where the key is rotated.
 - **Redact** — black out every reported credential in place (same length, columns intact) to share a safe copy; one click to undo.
 - **False positives → baseline** — mark findings as false positives and download a `.guardenv-baseline.json` whose ids are computed exactly like the CLI's, so `--baseline` honours them in CI.
 - **Protect** — generated `.gitignore`, a `.env.example` with secret values emptied, and the pre-commit and GitHub Actions snippets.
 - **Keyboard** — `J` / `K` step through findings, `Esc` clears the selection.
+- **Share** — the analysis mode, threshold, severity floor and the loaded sample live in the URL hash, so a link reopens the same view. Pasted text never goes into the URL.
+- **English / Spanish, light / dark** — the language follows the browser on the first visit and the theme follows the system; both switches are remembered.
 
 ### Deployment
 
@@ -274,6 +281,7 @@ guardenv entropy TOKEN       score one string and explain the verdict
 | `-e`, `--entropy-threshold N` | Absolute Shannon threshold in bits/char, applied to every charset |
 | `--no-entropy` / `--no-rules` | Run a single detector |
 | `--no-heuristics` | Disable benign-shape suppression (expect noise; useful for triage) |
+| `--no-decode` | Skip the encoded-secret pass (base64 values are decoded and their plaintext scanned by default) |
 | `-r`, `--rule ID` / `--exclude-rule ID` | Select or disable rules by id (repeatable; unknown ids exit `2`) |
 | `--exclude-dir NAME` / `--exclude GLOB` / `--include GLOB` | Narrow the traversal |
 | `--max-file-size BYTES` | Skip files above this size (default 5 MB) |
@@ -299,10 +307,10 @@ Fingerprints are `sha256(path, rule id, line, secret)` truncated to 16 hex chara
 
 ## Rule matrix
 
-GuardEnv ships **48 deterministic signatures** plus the entropy detector.
+GuardEnv ships **52 deterministic signatures** plus the entropy detector.
 
 <details>
-<summary><b>Cloud providers</b> — 9 rules</summary>
+<summary><b>Cloud providers</b> — 12 rules</summary>
 
 | Rule ID | Detects | Severity | Verified |
 | --- | --- | :--: | :--: |
@@ -313,8 +321,11 @@ GuardEnv ships **48 deterministic signatures** plus the entropy detector.
 | `digitalocean-token` | DigitalOcean Personal Access Token | `CRITICAL` | — |
 | `gcp-oauth-client-secret` | Google OAuth Client Secret | `CRITICAL` | — |
 | `gcp-service-account` | GCP Service Account Key File | `CRITICAL` | — |
+| `supabase-access-token` | Supabase Access Token | `CRITICAL` | — |
 | `aws-session-token` | AWS Session Token | `HIGH` | — |
 | `gcp-api-key` | Google Cloud API Key | `HIGH` | — |
+| `cloudflare-api-token` | Cloudflare API Token | `HIGH` | — |
+| `vercel-token` | Vercel Access Token | `HIGH` | — |
 
 </details>
 
@@ -359,7 +370,7 @@ GuardEnv ships **48 deterministic signatures** plus the entropy detector.
 </details>
 
 <details>
-<summary><b>Communications & SaaS</b> — 9 rules</summary>
+<summary><b>Communications & SaaS</b> — 10 rules</summary>
 
 | Rule ID | Detects | Severity | Verified |
 | --- | --- | :--: | :--: |
@@ -367,6 +378,7 @@ GuardEnv ships **48 deterministic signatures** plus the entropy detector.
 | `slack-token` | Slack API Token | `CRITICAL` | — |
 | `datadog-api-key` | Datadog API Key | `HIGH` | — |
 | `discord-bot-token` | Discord Bot Token | `HIGH` | — |
+| `discord-webhook` | Discord Webhook | `HIGH` | — |
 | `mailgun-api-key` | Mailgun API Key | `HIGH` | — |
 | `slack-webhook` | Slack Incoming Webhook | `HIGH` | — |
 | `telegram-bot-token` | Telegram Bot Token | `HIGH` | — |
@@ -451,7 +463,7 @@ Rules marked **Verified** carry a structural validator. GitHub tokens embed a ba
 ```bash
 pip install -e ".[dev]"
 
-pytest --cov=guardenv --cov-report=term-missing   # 222 tests
+pytest --cov=guardenv --cov-report=term-missing   # 240 tests
 ruff check . && ruff format --check .
 mypy                                              # strict
 
@@ -464,13 +476,17 @@ CI runs the Python suite across 3.10 / 3.11 / 3.12 on Linux plus 3.12 on macOS a
 
 The self-scan job also asserts that the fixture tree in `examples/` still exits `1` — a regression that silently stops detecting secrets would otherwise look like a green build.
 
+### Releasing
+
+Push a `v*` tag (`git tag v1.1.0 && git push origin v1.1.0`). The release workflow builds the sdist and wheel, checks them with `twine`, and creates a GitHub release with both attached and generated notes. Publishing to PyPI is a separate job that only runs once it is switched on: configure a [trusted publisher](https://docs.pypi.org/trusted-publishers/) for this repository on PyPI (workflow `release.yml`, environment `pypi`), then set the repository variable `PYPI_PUBLISH` to `true`. No API token is ever stored.
+
 ---
 
 ## Limitations
 
 Worth knowing before you rely on it:
 
-- **Working tree only.** GuardEnv does not walk git history. A secret removed in the current commit but still reachable in an earlier one will not be reported; pair it with a history scanner for that.
+- **Working tree only.** GuardEnv does not walk git history. A secret removed in the current commit but still reachable in an earlier one will not be reported; pair it with a history scanner for that. (The playground's diff mode does flag secrets on the removed lines of a patch you paste.)
 - **No liveness check.** Findings are not validated against provider APIs, so a rotated key still reports as a finding. That is intentional — validating would mean sending your credentials to a third party.
 - **The `.gitignore` support is a documented subset.** Comments, negation, directory-only patterns, anchoring and shell globs are handled; exotic `**` anchoring is not. Unsupported patterns simply fail to match, so the scanner errs towards scanning more, never less.
 - **Single-machine throughput.** Detection is CPU-bound Python. For very large monorepos, shard by directory across CI jobs rather than reaching for `--workers`.
