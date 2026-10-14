@@ -223,7 +223,10 @@ class TestScanPaths:
         (tmp_path / "legacy.env").write_bytes("# se\xf1al\n".encode("latin-1") + SECRET_LINE.encode())
         assert scanner.scan_paths([tmp_path]).findings
 
-    @pytest.mark.skipif(os.geteuid() == 0, reason="root bypasses permission bits")
+    @pytest.mark.skipif(
+        sys.platform == "win32" or os.geteuid() == 0,
+        reason="Windows has no POSIX permission bits; root bypasses them",
+    )
     def test_unreadable_file_is_reported_not_fatal(self, scanner: Scanner, tmp_path: Path) -> None:
         locked = tmp_path / "locked.env"
         locked.write_text(SECRET_LINE)

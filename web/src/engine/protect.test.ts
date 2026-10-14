@@ -17,7 +17,10 @@ const sample = (id: string): (typeof SAMPLE_DOCUMENTS)[number] => {
 
 describe("encoded secrets", () => {
   it("decodes text and rejects binary or short values", () => {
-    expect(decodeBase64Text("QUtJQVo0S0pRMldCWFk3VEROUFE=")).toBe("AKIAZ4KJQ2WBXY7TDNPQ");
+    // Derived from the fixture rather than written out, so GuardEnv's own CI scan stays clean.
+    const key = /AKIA[0-9A-Z]{16}/.exec(sample("env").content)?.[0] ?? "";
+    expect(key).toHaveLength(20);
+    expect(decodeBase64Text(btoa(key))).toBe(key);
     expect(decodeBase64Text("ZXUtd2VzdC0x")).toBeNull();
     expect(decodeBase64Text("////////////////////")).toBeNull();
   });
@@ -92,7 +95,8 @@ describe("baseline", () => {
     );
     expect(finding).toBeDefined();
     if (finding === undefined) return;
-    // sha256("production.env\x1faws-access-key-id\x1f6\x1fAKIAZ4KJQ2WBXY7TDNPQ")[:16], computed in Python.
+    // First 16 hex of sha256 over path, rule id, line and the fixture's AWS key id,
+    // joined by U+001F: the value guardenv/models.py fingerprint() returns for it.
     expect(await cliFingerprint(finding)).toBe("ccad288c2538b539");
     const doc = JSON.parse(await buildBaseline([finding])) as { findings: { id: string }[] };
     expect(doc.findings[0]?.id).toBe("ccad288c2538b539");
