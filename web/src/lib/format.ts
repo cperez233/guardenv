@@ -6,31 +6,31 @@ export const SEVERITY_CLASSES: Readonly<
   Record<SeverityLevel, { badge: string; text: string; dot: string; bar: string }>
 > = {
   CRITICAL: {
-    badge: "bg-severity-critical/15 text-severity-critical ring-severity-critical/30",
+    badge: "bg-severity-critical/10 text-severity-critical ring-severity-critical/35",
     text: "text-severity-critical",
     dot: "bg-severity-critical",
     bar: "bg-severity-critical",
   },
   HIGH: {
-    badge: "bg-severity-high/15 text-severity-high ring-severity-high/30",
+    badge: "bg-severity-high/10 text-severity-high ring-severity-high/35",
     text: "text-severity-high",
     dot: "bg-severity-high",
     bar: "bg-severity-high",
   },
   MEDIUM: {
-    badge: "bg-severity-medium/15 text-severity-medium ring-severity-medium/30",
+    badge: "bg-severity-medium/10 text-severity-medium ring-severity-medium/35",
     text: "text-severity-medium",
     dot: "bg-severity-medium",
     bar: "bg-severity-medium",
   },
   LOW: {
-    badge: "bg-severity-low/15 text-severity-low ring-severity-low/30",
+    badge: "bg-severity-low/10 text-severity-low ring-severity-low/35",
     text: "text-severity-low",
     dot: "bg-severity-low",
     bar: "bg-severity-low",
   },
   INFO: {
-    badge: "bg-severity-info/15 text-severity-info ring-severity-info/30",
+    badge: "bg-severity-info/10 text-severity-info ring-severity-info/35",
     text: "text-severity-info",
     dot: "bg-severity-info",
     bar: "bg-severity-info",

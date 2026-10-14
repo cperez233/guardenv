@@ -112,7 +112,7 @@ to be fetched at runtime.
 
 ## Self-hosting the font
 
-The page pulls Inter from Google Fonts, which is why `fonts.googleapis.com` and
+The page pulls Archivo, Public Sans and JetBrains Mono from Google Fonts, which is why `fonts.googleapis.com` and
 `fonts.gstatic.com` appear in the CSP. Pasted content is never involved, but the
 request does expose each visitor's IP address to Google.
 

@@ -1,15 +1,22 @@
+/* editorial-ui · Cristian Pérez · cristianperez.me */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    color-scheme: dark;
+    color-scheme: light;
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+    scrollbar-gutter: stable;
+    overflow-x: clip;
   }
 
   /* `min-height` rather than `height`: the page is taller than the viewport, and
-     a hard 100% height on the scroll container interacts badly with the sticky,
-     backdrop-blurred header during compositing. */
+     a hard 100% height on the scroll container interacts badly with the sticky
+     header during compositing. */
   html,
   body,
   #root {
@@ -17,13 +24,26 @@
   }
 
   body {
-    @apply bg-surface-0 text-content-primary antialiased;
+    @apply bg-surface-0 font-sans text-content-primary antialiased;
+    /* Barely-there paper tooth: two offset dot grids, static, never animated. */
+    background-image:
+      radial-gradient(rgb(16 19 23 / 0.035) 1px, transparent 1px),
+      radial-gradient(rgb(255 255 255 / 0.5) 1px, transparent 1px);
+    background-size: 22px 22px, 22px 22px;
+    background-position: 0 0, 11px 11px;
+  }
+
+  button,
+  select,
+  input,
+  a {
+    touch-action: manipulation;
   }
 
   /* Hairline scrollbars, so the panels keep their density. */
   * {
     scrollbar-width: thin;
-    scrollbar-color: #3f3f46 transparent;
+    scrollbar-color: #a7aeb7 transparent;
   }
 
   *::-webkit-scrollbar {
@@ -36,46 +56,108 @@
   }
 
   *::-webkit-scrollbar-thumb {
-    background-color: #3f3f46;
+    background-color: #a7aeb7;
     border: 3px solid transparent;
     background-clip: content-box;
     border-radius: 9999px;
   }
 
   *::-webkit-scrollbar-thumb:hover {
-    background-color: #52525b;
+    background-color: #737b85;
   }
 
   :focus-visible {
-    @apply outline-none ring-2 ring-severity-clean/60 ring-offset-2 ring-offset-surface-0;
+    @apply outline-none ring-2 ring-ink ring-offset-2 ring-offset-surface-1;
   }
 
   ::selection {
-    @apply bg-severity-clean/25 text-content-primary;
+    @apply bg-mark text-content-primary;
   }
 }
 
 @layer components {
-  /* The range track/thumb need explicit styling to survive the dark ground. */
-  input[type="range"]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    height: 14px;
-    width: 14px;
-    border-radius: 9999px;
-    background: #fafafa;
-    border: 2px solid #09090b;
-    box-shadow: 0 0 0 1px #3f3f46;
-    cursor: pointer;
+  /* A highlighter stroke behind text: slightly lifted, ragged ends. */
+  .marker {
+    background-image: linear-gradient(
+      100deg,
+      transparent 0.2em,
+      theme("colors.mark.DEFAULT") 0.3em,
+      theme("colors.mark.DEFAULT") calc(100% - 0.3em),
+      transparent calc(100% - 0.2em)
+    );
+    background-repeat: no-repeat;
+    background-size: 100% 62%;
+    background-position: 0 72%;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
   }
 
-  input[type="range"]::-moz-range-thumb {
-    height: 14px;
-    width: 14px;
-    border-radius: 9999px;
-    background: #fafafa;
-    border: 2px solid #09090b;
-    box-shadow: 0 0 0 1px #3f3f46;
-    cursor: pointer;
+  /* Grow only the tappable area of a compact control (≥ 44px). */
+  .hit {
+    position: relative;
+  }
+  .hit::after {
+    content: "";
+    position: absolute;
+    inset: -8px -4px;
+  }
+
+  /* The range track/thumb, drawn as a redaction bar sliding on a ruler. */
+  input[type="range"].ruler {
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    height: 28px;
+  }
+  input[type="range"].ruler::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 2px;
+    background: linear-gradient(
+      to right,
+      theme("colors.ink.DEFAULT") 0 var(--fill, 50%),
+      theme("colors.surface.4") var(--fill, 50%) 100%
+    );
+  }
+  input[type="range"].ruler::-moz-range-track {
+    height: 4px;
+    border-radius: 2px;
+    background: theme("colors.surface.4");
+  }
+  input[type="range"].ruler::-moz-range-progress {
+    height: 4px;
+    border-radius: 2px;
+    background: theme("colors.ink.DEFAULT");
+  }
+  input[type="range"].ruler::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    margin-top: -10px;
+    height: 24px;
+    width: 34px;
+    border-radius: 4px;
+    background: theme("colors.ink.DEFAULT");
+    border: 3px solid theme("colors.mark.DEFAULT");
+    box-shadow: 0 6px 16px -6px rgb(16 19 23 / 0.5);
+    cursor: grab;
+    transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  input[type="range"].ruler:active::-webkit-slider-thumb {
+    cursor: grabbing;
+    transform: scale(0.94);
+  }
+  input[type="range"].ruler::-moz-range-thumb {
+    height: 18px;
+    width: 28px;
+    border-radius: 4px;
+    background: theme("colors.ink.DEFAULT");
+    border: 3px solid theme("colors.mark.DEFAULT");
+    box-shadow: 0 6px 16px -6px rgb(16 19 23 / 0.5);
+    cursor: grab;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [class*="anim-"] {
+    animation: none !important;
   }
 }

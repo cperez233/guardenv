@@ -1,9 +1,13 @@
+/* editorial-ui · Cristian Pérez · cristianperez.me */
 import type { ReactElement } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { Radar, ShieldAlert, ShieldCheck } from "lucide-react";
 
 import type { ScanSummary } from "@/engine/types";
 import type { AnalysisMode } from "@/hooks/useScanner";
 import { cx, pluralize } from "@/lib/format";
+import { ease, softSpring, spring } from "@/lib/motion";
+import { BrandMark } from "./BrandMark";
 
 const MODES: readonly { id: AnalysisMode; label: string; hint: string }[] = [
   { id: "combined", label: "Combined", hint: "Regex signatures plus entropy analysis" },
@@ -37,40 +41,58 @@ function StatusPill({
   isScanning,
   hasInput,
 }: Pick<HeaderProps, "summary" | "isScanning" | "hasInput">): ReactElement {
+  const clean = summary.totalFindings === 0;
+  const key = isScanning ? "scanning" : !hasInput ? "idle" : clean ? "clean" : `findings-${summary.totalFindings}`;
+
+  let body: ReactElement;
   if (isScanning) {
-    return (
-      <span className="inline-flex items-center gap-2 rounded-full border border-hairline bg-surface-2 px-3 py-1 text-xs text-content-secondary">
-        <Radar className="h-3.5 w-3.5 animate-spin text-content-tertiary" aria-hidden />
+    body = (
+      <span className="inline-flex items-center gap-2 rounded-md border border-hairline bg-surface-1 px-2.5 py-1 text-[13px] text-content-secondary">
+        <Radar className="h-3.5 w-3.5 shrink-0 animate-spin text-content-tertiary" aria-hidden />
         Analysing
       </span>
     );
-  }
-  if (!hasInput) {
-    return (
-      <span className="inline-flex items-center gap-2 rounded-full border border-hairline bg-surface-2 px-3 py-1 text-xs text-content-tertiary">
-        <span className="h-1.5 w-1.5 rounded-full bg-content-faint" aria-hidden />
+  } else if (!hasInput) {
+    body = (
+      <span className="inline-flex items-center gap-2 rounded-md border border-hairline bg-surface-1 px-2.5 py-1 text-[13px] text-content-tertiary">
+        <span className="h-1.5 w-3 shrink-0 rounded-sm bg-content-faint" aria-hidden />
         Idle
       </span>
     );
+  } else {
+    body = (
+      <span
+        className={cx(
+          "inline-flex items-center gap-2 rounded-md px-2.5 py-1 text-[13px] font-semibold",
+          clean ? "bg-severity-clean text-white" : "bg-ink text-surface-1",
+        )}
+      >
+        {clean ? (
+          <ShieldCheck className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        ) : (
+          <ShieldAlert className="h-3.5 w-3.5 shrink-0 text-mark" aria-hidden />
+        )}
+        {clean
+          ? "Clean"
+          : `${summary.totalFindings} ${pluralize(summary.totalFindings, "finding")}`}
+      </span>
+    );
   }
-  const clean = summary.totalFindings === 0;
+
   return (
-    <span
-      className={cx(
-        "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium",
-        clean
-          ? "border-severity-clean/30 bg-severity-clean/10 text-severity-clean"
-          : "border-severity-critical/30 bg-severity-critical/10 text-severity-critical",
-      )}
-    >
-      {clean ? (
-        <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
-      ) : (
-        <ShieldAlert className="h-3.5 w-3.5" aria-hidden />
-      )}
-      {clean
-        ? "Clean"
-        : `${summary.totalFindings} ${pluralize(summary.totalFindings, "finding")}`}
+    <span className="relative inline-flex" aria-live="polite">
+      <AnimatePresence mode="popLayout" initial={false}>
+        <motion.span
+          key={key}
+          initial={{ opacity: 0, y: 6, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -6, scale: 0.96 }}
+          transition={{ duration: 0.22, ease }}
+          className="inline-flex"
+        >
+          {body}
+        </motion.span>
+      </AnimatePresence>
     </span>
   );
 }
@@ -84,59 +106,67 @@ export function Header({
   repositoryUrl,
 }: HeaderProps): ReactElement {
   return (
-    <header className="sticky top-0 z-20 border-b border-hairline bg-surface-0/85 backdrop-blur-md">
-      <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3 sm:px-6">
-        <div className="flex items-center gap-3">
-          <div className="grid h-8 w-8 place-items-center rounded-md border border-hairline-strong bg-surface-3">
-            <ShieldCheck className="h-4 w-4 text-severity-clean" aria-hidden />
-          </div>
-          <div className="leading-tight">
-            <h1 className="font-semibold tracking-tight text-content-primary">GuardEnv</h1>
-            <p className="text-[11px] text-content-tertiary">
-              Secret scanner playground · runs entirely in your browser
-            </p>
-          </div>
-        </div>
+    <motion.header
+      initial={{ y: -12, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ duration: 0.6, ease }}
+      className="sticky top-0 z-30 border-b border-hairline bg-surface-0/[0.98] shadow-rest"
+    >
+      <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-x-4 gap-y-2.5 px-4 py-2.5 sm:px-6 lg:px-10">
+        <a href="#top" className="group flex min-h-11 items-center gap-2.5" aria-label="GuardEnv, back to top">
+          <BrandMark className="h-8 w-8 shrink-0 transition-transform duration-300 group-hover:-rotate-6" />
+          <span className="font-display text-[17px] font-[800] tracking-[-0.01em] [font-stretch:115%]">
+            GuardEnv
+          </span>
+        </a>
 
         <StatusPill summary={summary} isScanning={isScanning} hasInput={hasInput} />
 
-        <div className="ml-auto flex items-center gap-3">
-          <div
-            role="radiogroup"
-            aria-label="Analysis mode"
-            className="flex rounded-md border border-hairline bg-surface-2 p-0.5"
-          >
-            {MODES.map((entry) => (
-              <button
+        <a
+          href={repositoryUrl}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="hit ml-auto inline-flex h-9 items-center gap-2 rounded-md border border-hairline bg-surface-1 px-2.5 sm:h-auto sm:px-3 sm:py-1.5 text-[13px] font-medium text-content-secondary transition-[color,border-color,transform] duration-200 hover:border-hairline-strong hover:text-content-primary active:scale-[0.97] md:order-last md:ml-0"
+        >
+          <GithubMark className="h-4 w-4 shrink-0 sm:h-3.5 sm:w-3.5" />
+          <span className="sr-only sm:not-sr-only">Repository</span>
+        </a>
+
+        <div
+          role="radiogroup"
+          aria-label="Analysis mode"
+          className="flex w-full rounded-lg border border-hairline bg-surface-2 p-0.5 md:ml-auto md:w-auto"
+        >
+          {MODES.map((entry) => {
+            const selected = mode === entry.id;
+            return (
+              <motion.button
                 key={entry.id}
                 type="button"
                 role="radio"
-                aria-checked={mode === entry.id}
+                aria-checked={selected}
                 title={entry.hint}
                 onClick={() => { onModeChange(entry.id); }}
+                whileTap={{ scale: 0.96 }}
+                transition={softSpring}
                 className={cx(
-                  "rounded px-2.5 py-1 text-xs font-medium transition-colors",
-                  mode === entry.id
-                    ? "bg-surface-4 text-content-primary shadow-sm"
-                    : "text-content-tertiary hover:text-content-secondary",
+                  "relative h-10 flex-1 rounded-md px-3 text-[13px] md:h-8 font-semibold transition-colors md:flex-none",
+                  selected ? "text-surface-1" : "text-content-tertiary hover:text-content-primary",
                 )}
               >
-                {entry.label}
-              </button>
-            ))}
-          </div>
-
-          <a
-            href={repositoryUrl}
-            target="_blank"
-            rel="noreferrer noopener"
-            className="inline-flex items-center gap-2 rounded-md border border-hairline bg-surface-2 px-3 py-1.5 text-xs font-medium text-content-secondary transition-colors hover:border-hairline-strong hover:text-content-primary"
-          >
-            <GithubMark className="h-3.5 w-3.5" />
-            Repository
-          </a>
+                {selected && (
+                  <motion.span
+                    layoutId="mode-pill"
+                    transition={spring}
+                    className="absolute inset-0 rounded-md bg-ink shadow-raised"
+                  />
+                )}
+                <span className="relative">{entry.label}</span>
+              </motion.button>
+            );
+          })}
         </div>
       </div>
-    </header>
+    </motion.header>
   );
 }

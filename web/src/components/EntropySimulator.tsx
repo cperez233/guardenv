@@ -1,17 +1,21 @@
+/* editorial-ui · Cristian Pérez · cristianperez.me */
+import { motion } from "framer-motion";
 import { Activity, Sigma } from "lucide-react";
-import { useMemo } from "react";
-import type { ReactElement } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ReactElement, RefObject } from "react";
 
 import type { EntropyResult } from "@/engine/types";
 import { cx } from "@/lib/format";
+import { ease, reveal } from "@/lib/motion";
+import { RollingNumber } from "./Numbers";
 
 const MIN_THRESHOLD = 3.0;
 const MAX_THRESHOLD = 6.0;
 const STEP = 0.05;
 
-/** Chart geometry, in the SVG's own user units. */
-const VIEW = { width: 640, height: 200, padLeft: 34, padRight: 12, padTop: 12, padBottom: 26 };
-const PLOT_WIDTH = VIEW.width - VIEW.padLeft - VIEW.padRight;
+/** Chart geometry, in the SVG's own user units. Width follows the container. */
+const VIEW = { height: 240, padLeft: 34, padRight: 14, padTop: 16, padBottom: 28 };
+const MIN_WIDTH = 300;
 const PLOT_HEIGHT = VIEW.height - VIEW.padTop - VIEW.padBottom;
 
 /** Entropy axis. 8 bits/char is the ceiling for any byte-oriented alphabet. */
@@ -19,12 +23,15 @@ const Y_MIN = 0;
 const Y_MAX = 8;
 
 const CHARSET_COLORS: Readonly<Record<string, string>> = {
-  hex: "#38bdf8",
-  base64: "#a78bfa",
-  base64url: "#f472b6",
-  alphanumeric: "#34d399",
-  mixed: "#fbbf24",
+  hex: "#1d68ad",
+  base64: "#6a46c9",
+  base64url: "#bf2f73",
+  alphanumeric: "#17774a",
+  mixed: "#9a6400",
 };
+
+const INK = "#101317";
+const MARK = "#e3f24a";
 
 interface EntropySimulatorProps {
   readonly profile: readonly EntropyResult[];
@@ -50,6 +57,22 @@ function yFor(entropy: number): number {
   return VIEW.padTop + PLOT_HEIGHT * (1 - (clamped - Y_MIN) / (Y_MAX - Y_MIN));
 }
 
+/** Width of an element, kept current with a ResizeObserver. */
+function useWidth<T extends HTMLElement>(fallback: number): [RefObject<T>, number] {
+  const ref = useRef<T>(null);
+  const [width, setWidth] = useState(fallback);
+  useEffect(() => {
+    const node = ref.current;
+    if (node === null) return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry !== undefined) setWidth(Math.round(entry.contentRect.width));
+    });
+    observer.observe(node);
+    return () => { observer.disconnect(); };
+  }, []);
+  return [ref, width];
+}
+
 export function EntropySimulator({
   profile,
   threshold,
@@ -58,6 +81,10 @@ export function EntropySimulator({
   onHeuristicsChange,
   onSelectToken,
 }: EntropySimulatorProps): ReactElement {
+  const [frameRef, frameWidth] = useWidth<HTMLDivElement>(900);
+  const width = Math.max(MIN_WIDTH, frameWidth);
+  const plotWidth = width - VIEW.padLeft - VIEW.padRight;
+
   const points = useMemo<PlottedPoint[]>(() => {
     if (profile.length === 0) return [];
     const maxIndex = Math.max(profile.length - 1, 1);
@@ -68,9 +95,9 @@ export function EntropySimulator({
       const above = result.entropy >= threshold;
       return {
         key: `${result.line}:${result.column}:${index}`,
-        cx: VIEW.padLeft + ratio * PLOT_WIDTH,
+        cx: VIEW.padLeft + ratio * plotWidth,
         cy: yFor(result.entropy),
-        color: CHARSET_COLORS[result.charset] ?? "#a1a1aa",
+        color: CHARSET_COLORS[result.charset] ?? "#5e6670",
         result,
         above,
         // Above the line but rejected by a structural heuristic: the reader
@@ -78,39 +105,61 @@ export function EntropySimulator({
         suppressed: above && !result.suspicious,
       };
     });
-  }, [profile, threshold]);
+  }, [profile, threshold, plotWidth]);
 
   const thresholdY = yFor(threshold);
   const flagged = points.filter((point) => point.result.suspicious).length;
   const suppressed = points.filter((point) => point.suppressed).length;
+  const fill = ((threshold - MIN_THRESHOLD) / (MAX_THRESHOLD - MIN_THRESHOLD)) * 100;
 
   return (
-    <section className="rounded-xl border border-hairline bg-surface-1">
-      <div className="flex flex-wrap items-center gap-3 border-b border-hairline px-3 py-2">
-        <Sigma className="h-4 w-4 text-content-tertiary" aria-hidden />
-        <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-content-secondary">
+    <motion.section
+      {...reveal}
+      aria-label="Entropy simulator"
+      className="overflow-hidden rounded-xl bg-surface-1 shadow-raised ring-1 ring-hairline"
+    >
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-hairline px-4 py-3 sm:px-5">
+        <Sigma className="h-4 w-4 shrink-0 text-content-tertiary" aria-hidden />
+        <h2 className="font-display text-[17px] font-[750] tracking-[-0.01em] [font-stretch:110%]">
           Entropy simulator
         </h2>
-        <span className="font-mono text-[11px] text-content-faint">
-          {profile.length} tokens · {flagged} above threshold
+        <span className="font-mono text-[12px] text-content-tertiary">
+          {profile.length} tokens · <RollingNumber value={flagged} className="align-bottom" /> above threshold
           {suppressed > 0 && ` · ${suppressed} suppressed`}
         </span>
-        <label className="ml-auto flex cursor-pointer select-none items-center gap-2 text-[11px] text-content-secondary">
+        <label className="group flex w-full cursor-pointer sm:ml-auto sm:w-auto select-none items-center gap-2.5 py-1 text-[14px] font-medium text-content-secondary">
           <input
             type="checkbox"
             checked={useHeuristics}
             onChange={(event) => { onHeuristicsChange(event.target.checked); }}
-            className="h-3.5 w-3.5 accent-severity-clean"
+            className="peer sr-only"
           />
+          <span
+            aria-hidden
+            className={cx(
+              "relative h-6 w-10 shrink-0 rounded-full transition-colors duration-200 peer-focus-visible:ring-2 peer-focus-visible:ring-ink peer-focus-visible:ring-offset-2",
+              useHeuristics ? "bg-ink" : "bg-surface-4",
+            )}
+          >
+            <motion.span
+              initial={false}
+              animate={{ x: useHeuristics ? 18 : 2 }}
+              transition={{ type: "spring", stiffness: 600, damping: 34 }}
+              className={cx(
+                "absolute top-[3px] h-[18px] w-[18px] rounded-full shadow-rest",
+                useHeuristics ? "bg-mark" : "bg-surface-1",
+              )}
+            />
+          </span>
           Suppress benign shapes
         </label>
       </div>
 
-      <div className="px-3 py-3">
-        <div className="flex items-center gap-3">
+      <div className="px-4 py-4 sm:px-5 sm:py-5">
+        <div className="flex items-center gap-3 sm:gap-5">
           <label
             htmlFor="guardenv-threshold"
-            className="text-[10px] font-medium uppercase tracking-[0.12em] text-content-tertiary"
+            className="sr-only text-[13px] font-semibold text-content-secondary sm:not-sr-only sm:shrink-0"
           >
             Shannon threshold
           </label>
@@ -122,131 +171,151 @@ export function EntropySimulator({
             step={STEP}
             value={threshold}
             onChange={(event) => { onThresholdChange(Number(event.target.value)); }}
-            className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-surface-4 accent-severity-clean"
+            className="ruler min-w-0 flex-1 cursor-pointer"
+            style={{ ["--fill" as string]: `${fill}%` }}
             aria-valuetext={`${threshold.toFixed(2)} bits per character`}
           />
           <output
             htmlFor="guardenv-threshold"
-            className="w-20 shrink-0 rounded border border-hairline bg-surface-2 px-2 py-0.5 text-center font-mono text-xs text-content-primary"
+            className="w-[4.5rem] shrink-0 rounded-md bg-ink px-2 py-1 text-center font-mono text-[15px] font-bold tabular-nums text-mark"
           >
             {threshold.toFixed(2)}
           </output>
         </div>
 
-        <div className="mt-1 flex justify-between font-mono text-[10px] text-content-faint">
+        <div className="mt-1.5 flex justify-between gap-2 whitespace-nowrap font-mono text-[12px] text-content-tertiary">
           <span>{MIN_THRESHOLD.toFixed(1)} · permissive</span>
-          <span>bits / character</span>
+          <span className="hidden sm:inline">bits / character</span>
           <span>{MAX_THRESHOLD.toFixed(1)} · strict</span>
         </div>
 
-        <div className="mt-3 overflow-x-auto">
+        <div ref={frameRef} className="mt-4 overflow-x-auto [overscroll-behavior-x:contain]">
           <svg
-            viewBox={`0 0 ${VIEW.width} ${VIEW.height}`}
-            className="h-[200px] w-full min-w-[520px]"
+            viewBox={`0 0 ${width} ${VIEW.height}`}
+            width={width}
+            height={VIEW.height}
+            className="block"
             role="img"
             aria-label={`Entropy of ${profile.length} tokens against a threshold of ${threshold.toFixed(2)} bits per character`}
           >
+            {/* The band above the threshold is the highlighter: what lands there is evidence. */}
+            <motion.rect
+              x={VIEW.padLeft}
+              y={VIEW.padTop}
+              width={plotWidth}
+              initial={false}
+              animate={{ height: Math.max(0, thresholdY - VIEW.padTop) }}
+              transition={{ type: "spring", stiffness: 500, damping: 40 }}
+              fill={MARK}
+              opacity={0.32}
+              rx={3}
+            />
+
             {[0, 2, 4, 6, 8].map((tick) => (
               <g key={tick}>
                 <line
                   x1={VIEW.padLeft}
-                  x2={VIEW.width - VIEW.padRight}
+                  x2={width - VIEW.padRight}
                   y1={yFor(tick)}
                   y2={yFor(tick)}
-                  stroke="#27272a"
+                  stroke="#cfd4da"
                   strokeWidth={1}
                 />
                 <text
-                  x={VIEW.padLeft - 6}
-                  y={yFor(tick) + 3}
+                  x={VIEW.padLeft - 8}
+                  y={yFor(tick) + 4}
                   textAnchor="end"
-                  fill="#52525b"
-                  fontSize={9}
-                  fontFamily="ui-monospace, monospace"
+                  fill="#565e68"
+                  fontSize={11}
+                  fontFamily="'JetBrains Mono', ui-monospace, monospace"
                 >
                   {tick}
                 </text>
               </g>
             ))}
 
-            <rect
-              x={VIEW.padLeft}
-              y={VIEW.padTop}
-              width={PLOT_WIDTH}
-              height={Math.max(0, thresholdY - VIEW.padTop)}
-              fill="#f43f5e"
-              opacity={0.06}
-            />
 
-            <line
-              x1={VIEW.padLeft}
-              x2={VIEW.width - VIEW.padRight}
-              y1={thresholdY}
-              y2={thresholdY}
-              stroke="#f43f5e"
-              strokeWidth={1.5}
-              strokeDasharray="5 4"
-            />
-            <text
-              x={VIEW.width - VIEW.padRight}
-              y={thresholdY - 5}
-              textAnchor="end"
-              fill="#f43f5e"
-              fontSize={9}
-              fontFamily="ui-monospace, monospace"
+            {points.map((point, index) => {
+              const hot = point.result.suspicious;
+              return (
+                <motion.circle
+                  key={point.key}
+                  cx={point.cx}
+                  cy={point.cy}
+                  initial={{ r: 0, opacity: 0 }}
+                  animate={{ r: hot ? 6 : 4, opacity: hot ? 1 : 0.75 }}
+                  transition={{ duration: 0.45, delay: Math.min(index * 0.03, 0.6), ease }}
+                  fill={hot ? point.color : "#f4f5f7"}
+                  stroke={hot ? INK : point.color}
+                  strokeWidth={hot ? 1.5 : 1.6}
+                  strokeDasharray={point.suppressed ? "2 2" : undefined}
+                  className="cursor-pointer outline-none transition-[stroke-width] duration-150 hover:[stroke-width:3px]"
+                  onClick={() => { onSelectToken(point.result.line); }}
+                >
+                  <title>
+                    {`line ${point.result.line} · ${point.result.charset} · ${point.result.entropy.toFixed(2)} bits/char · ${point.result.reason}`}
+                  </title>
+                </motion.circle>
+              );
+            })}
+
+            <motion.g
+              initial={false}
+              animate={{ y: thresholdY }}
+              transition={{ type: "spring", stiffness: 500, damping: 40 }}
             >
-              threshold {threshold.toFixed(2)}
-            </text>
-
-            {points.map((point) => (
-              <circle
-                key={point.key}
-                cx={point.cx}
-                cy={point.cy}
-                r={point.result.suspicious ? 4 : 2.5}
-                fill={point.result.suspicious ? point.color : "transparent"}
-                stroke={point.color}
-                strokeWidth={1.2}
-                strokeDasharray={point.suppressed ? "2 2" : undefined}
-                opacity={point.result.suspicious ? 0.95 : 0.5}
-                className="cursor-pointer transition-[r] hover:opacity-100"
-                onClick={() => { onSelectToken(point.result.line); }}
+              <line
+                x1={VIEW.padLeft}
+                x2={width - VIEW.padRight}
+                y1={0}
+                y2={0}
+                stroke={INK}
+                strokeWidth={1.5}
+                strokeDasharray="6 4"
+              />
+              <rect x={width - VIEW.padRight - 108} y={-21} width={108} height={17} rx={3} fill={INK} />
+              <text
+                x={width - VIEW.padRight - 54}
+                y={-9}
+                textAnchor="middle"
+                fill={MARK}
+                fontSize={11}
+                fontWeight={700}
+                fontFamily="'JetBrains Mono', ui-monospace, monospace"
               >
-                <title>
-                  {`line ${point.result.line} · ${point.result.charset} · ${point.result.entropy.toFixed(2)} bits/char · ${point.result.reason}`}
-                </title>
-              </circle>
-            ))}
+                threshold {threshold.toFixed(2)}
+              </text>
+            </motion.g>
 
             <text
               x={VIEW.padLeft}
               y={VIEW.height - 8}
-              fill="#52525b"
-              fontSize={9}
-              fontFamily="ui-monospace, monospace"
+              fill="#565e68"
+              fontSize={11}
+              fontFamily="'JetBrains Mono', ui-monospace, monospace"
             >
               tokens in document order
             </text>
           </svg>
         </div>
 
-        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+        <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2">
           {Object.entries(CHARSET_COLORS).map(([charset, color]) => (
             <span
               key={charset}
-              className="inline-flex items-center gap-1.5 font-mono text-[10px] text-content-tertiary"
+              className="inline-flex items-center gap-1.5 font-mono text-[12px] text-content-secondary"
             >
               <span
-                className="h-2 w-2 rounded-full"
+                className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-ink/70"
                 style={{ backgroundColor: color }}
                 aria-hidden
               />
               {charset}
             </span>
           ))}
-          <span className="inline-flex items-center gap-1.5 font-mono text-[10px] text-content-faint">
+          <span className="inline-flex items-center gap-1.5 font-mono text-[12px] text-content-tertiary">
             <span
-              className="h-2 w-2 rounded-full border border-dashed border-content-faint"
+              className="h-2.5 w-2.5 shrink-0 rounded-full border border-dashed border-content-tertiary"
               aria-hidden
             />
             suppressed by heuristics
@@ -256,15 +325,15 @@ export function EntropySimulator({
         {profile.length === 0 && (
           <p
             className={cx(
-              "mt-3 flex items-center gap-2 rounded-md border border-hairline bg-surface-2",
-              "px-3 py-2 text-xs text-content-tertiary",
+              "mt-4 flex items-center gap-2 rounded-md bg-surface-2 ring-1 ring-inset ring-hairline",
+              "px-3 py-2.5 text-[14px] text-content-tertiary",
             )}
           >
-            <Activity className="h-3.5 w-3.5" aria-hidden />
+            <Activity className="h-4 w-4 shrink-0" aria-hidden />
             No candidate tokens yet. Paste a document with strings of 20 characters or more.
           </p>
         )}
       </div>
-    </section>
+    </motion.section>
   );
 }
