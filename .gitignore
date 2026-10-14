@@ -38,3 +38,6 @@ guardenv.sarif
 .env.*.local
 !examples/*.env
 !tests/**/*.env
+
+# editorial-ui design brief (local working notes)
+.editorial-ui/
