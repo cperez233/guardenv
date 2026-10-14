@@ -1,6 +1,6 @@
 /* editorial-ui · Cristian Pérez · cristianperez.me */
 import { MotionConfig, motion } from "framer-motion";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { ReactElement } from "react";
 
 import { EditorPanel } from "@/components/EditorPanel";
@@ -8,13 +8,14 @@ import { EntropySimulator } from "@/components/EntropySimulator";
 import { Header } from "@/components/Header";
 import { Hero } from "@/components/Hero";
 import { InspectorPanel } from "@/components/InspectorPanel";
+import { redactDocument } from "@/engine/redact";
 import type { ScanFinding } from "@/engine/types";
 import { useScanner } from "@/hooks/useScanner";
 import { ease } from "@/lib/motion";
 import { DEFAULT_SAMPLE } from "@/lib/samples";
 import { invisibleSignature } from "@/lib/signature";
 
-const REPOSITORY_URL = "https://github.com/guardenv/guardenv";
+const REPOSITORY_URL = "https://github.com/cperez233/guardenv";
 
 export default function App(): ReactElement {
   const scanner = useScanner({
@@ -37,6 +38,61 @@ export default function App(): ReactElement {
 
   const hasInput = scanner.source.trim().length > 0;
 
+  // The last redaction, kept so it can be undone until the text is edited.
+  const [redaction, setRedaction] = useState<{ count: number; previous: string } | null>(null);
+
+  const editSource = useCallback(
+    (value: string) => {
+      setRedaction(null);
+      scanner.setSource(value);
+    },
+    [scanner],
+  );
+
+  const redact = useCallback(() => {
+    const { text, count } = redactDocument(scanner.source, scanner.summary.findings);
+    if (count === 0) return;
+    setActiveFinding(null);
+    setActiveLine(null);
+    setRedaction({ count, previous: scanner.source });
+    scanner.loadSample(text, scanner.filename);
+  }, [scanner]);
+
+  const undoRedaction = useCallback(() => {
+    if (redaction === null) return;
+    scanner.loadSample(redaction.previous, scanner.filename);
+    setRedaction(null);
+  }, [redaction, scanner]);
+
+  // J / K step through the findings, Esc clears the selection. Typing is never hijacked.
+  const findings = scanner.summary.findings;
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target !== null && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+      const key = event.key.toLowerCase();
+      if (key === "escape") {
+        setActiveFinding(null);
+        setActiveLine(null);
+        return;
+      }
+      if ((key !== "j" && key !== "k") || findings.length === 0) return;
+      event.preventDefault();
+      const index = activeFinding === null ? -1 : findings.findIndex((f) => f.id === activeFinding.id);
+      const next =
+        key === "j"
+          ? findings[Math.min(index + 1, findings.length - 1)]
+          : findings[index <= 0 ? 0 : index - 1];
+      if (next !== undefined) {
+        setActiveFinding(next);
+        setActiveLine(next.line);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => { window.removeEventListener("keydown", onKey); };
+  }, [findings, activeFinding]);
+
   return (
     <MotionConfig reducedMotion="user">
       <div className="min-h-screen text-content-primary">
@@ -58,18 +114,24 @@ export default function App(): ReactElement {
               filename={scanner.filename}
               findings={scanner.summary.findings}
               activeLine={activeLine}
-              onSourceChange={scanner.setSource}
+              onSourceChange={editSource}
               onFilenameChange={scanner.setFilename}
               onLoadSample={(content, name) => {
                 setActiveFinding(null);
                 setActiveLine(null);
+                setRedaction(null);
                 scanner.loadSample(content, name);
               }}
               onClear={() => {
                 setActiveFinding(null);
                 setActiveLine(null);
+                setRedaction(null);
                 scanner.clear();
               }}
+              canRedact={!scanner.isScanning && scanner.summary.findings.length > 0}
+              onRedact={redact}
+              redaction={redaction}
+              onUndoRedaction={undoRedaction}
             />
 
             <InspectorPanel

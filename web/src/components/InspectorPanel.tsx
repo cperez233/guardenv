@@ -10,7 +10,7 @@ import {
   ShieldCheck,
   Sigma,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ReactElement } from "react";
 
 import { buildReport, downloadReport, toMarkdownReport } from "@/engine/export";
@@ -56,6 +56,7 @@ function FindingRow({
     >
       <button
         type="button"
+        id={`finding-${finding.id}`}
         onClick={onSelect}
         aria-current={isActive}
         className={cx(
@@ -160,6 +161,12 @@ export function InspectorPanel({
 
   const clean = hasInput && summary.totalFindings === 0;
 
+  // Keyboard stepping (J / K) keeps the selected row in view inside the list.
+  useEffect(() => {
+    if (activeFindingId === null) return;
+    document.getElementById(`finding-${activeFindingId}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [activeFindingId]);
+
   const secondaryButton =
     "hit inline-flex items-center gap-1.5 rounded-md border border-hairline bg-surface-1 px-2.5 py-1.5 text-[13px] font-medium text-content-secondary transition-[color,border-color,transform] duration-150 hover:border-hairline-strong hover:text-content-primary active:scale-[0.96]";
 
@@ -175,6 +182,13 @@ export function InspectorPanel({
         <h2 className="font-display text-[17px] font-[750] tracking-[-0.01em] [font-stretch:110%]">
           Audit inspector
         </h2>
+        {summary.findings.length > 1 && (
+          <span className="ml-2 hidden items-center gap-1 text-[12px] text-content-tertiary [@media(hover:hover)_and_(pointer:fine)]:2xl:inline-flex">
+            <kbd className="rounded border border-hairline bg-surface-2 px-1.5 font-mono text-[11px] font-bold text-content-secondary">J</kbd>
+            <kbd className="rounded border border-hairline bg-surface-2 px-1.5 font-mono text-[11px] font-bold text-content-secondary">K</kbd>
+            step through
+          </span>
+        )}
         <label className="ml-auto flex items-center gap-2 text-[13px] font-medium text-content-tertiary">
           Min severity
           <select

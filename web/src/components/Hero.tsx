@@ -1,5 +1,5 @@
 /* editorial-ui · Cristian Pérez · cristianperez.me */
-import { motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useCallback, useRef, useState } from "react";
 import type { ReactElement } from "react";
 
@@ -128,9 +128,32 @@ function Verdict({ summary, hasInput, filename }: HeroProps): ReactElement {
         >
           {hasInput ? <RollingNumber value={total} /> : "—"}
         </span>
-        <span className="pb-1.5 text-[17px] font-semibold leading-tight text-content-secondary">
-          {!hasInput ? "Idle" : clean ? "Clean" : pluralize(total, "finding")}
-        </span>
+        <AnimatePresence mode="popLayout" initial={false}>
+          {clean ? (
+            /* A clean document earns the auditor's stamp. */
+            <motion.span
+              key="stamp"
+              initial={{ scale: 1.8, rotate: -18, opacity: 0 }}
+              animate={{ scale: 1, rotate: -6, opacity: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ type: "spring", stiffness: 520, damping: 22 }}
+              className="mb-2 rounded-[4px] border-[3px] border-severity-clean px-2.5 py-0.5 font-display text-[22px] font-[900] uppercase leading-tight tracking-[0.06em] text-severity-clean [font-stretch:115%]"
+            >
+              Clean
+            </motion.span>
+          ) : (
+            <motion.span
+              key={hasInput ? "findings" : "idle"}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.2, ease }}
+              className="pb-1.5 text-[17px] font-semibold leading-tight text-content-secondary"
+            >
+              {!hasInput ? "Idle" : pluralize(total, "finding")}
+            </motion.span>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Severity strip: one segment per level, sized by its count. */}

@@ -26,7 +26,7 @@ FROM python:3.12-alpine AS runtime
 
 LABEL org.opencontainers.image.title="GuardEnv" \
       org.opencontainers.image.description="High-speed detection of leaked credentials in source trees." \
-      org.opencontainers.image.source="https://github.com/guardenv/guardenv" \
+      org.opencontainers.image.source="https://github.com/cperez233/guardenv" \
       org.opencontainers.image.licenses="MIT"
 
 ENV PATH="/opt/venv/bin:$PATH" \

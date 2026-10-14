@@ -1,14 +1,15 @@
 /* editorial-ui · Cristian Pérez · cristianperez.me */
 import { AnimatePresence, motion } from "framer-motion";
-import { FileCode2, Trash2, Upload } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { Check, ClipboardCopy, EyeOff, FileCode2, Trash2, Undo2, Upload } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent, UIEvent, ReactElement } from "react";
 
 import type { ScanFinding, SeverityLevel } from "@/engine/types";
 import { SEVERITY_RANK } from "@/engine/types";
 import { SAMPLE_DOCUMENTS } from "@/lib/samples";
 import { SEVERITY_CLASSES, cx, formatBytes } from "@/lib/format";
-import { ease, reveal, spring } from "@/lib/motion";
+import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
+import { ease, reveal, softSpring, spring } from "@/lib/motion";
 
 /** Files a text-oriented scanner can meaningfully read. */
 const ACCEPTED_EXTENSIONS = [
@@ -51,6 +52,13 @@ interface EditorPanelProps {
   readonly onFilenameChange: (value: string) => void;
   readonly onLoadSample: (content: string, filename: string) => void;
   readonly onClear: () => void;
+  /** Whether a redaction can run now (findings exist and the scan is settled). */
+  readonly canRedact: boolean;
+  /** Called once the redaction bars have landed; the parent swaps the text. */
+  readonly onRedact: () => void;
+  /** Outcome of the last redaction, while the redacted text is untouched. */
+  readonly redaction: { readonly count: number } | null;
+  readonly onUndoRedaction: () => void;
 }
 
 /** Worst severity per line, so the gutter can carry a single colour. */
@@ -74,12 +82,83 @@ export function EditorPanel({
   onFilenameChange,
   onLoadSample,
   onClear,
+  canRedact,
+  onRedact,
+  redaction,
+  onUndoRedaction,
 }: EditorPanelProps): ReactElement {
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
+  const [isRedacting, setIsRedacting] = useState(false);
+  // Bumped whenever a whole document arrives: replays the scan sweep.
+  const [sweep, setSweep] = useState(0);
+  const [metrics, setMetrics] = useState({ charWidth: 7.8, padLeft: 16 });
   const inputRef = useRef<HTMLInputElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const measureRef = useRef<HTMLSpanElement>(null);
+  const { state: copyState, copy } = useCopyToClipboard();
+
+  const loadDocument = useCallback(
+    (content: string, name: string) => {
+      setSweep((value) => value + 1);
+      onLoadSample(content, name);
+    },
+    [onLoadSample],
+  );
+
+  // Monospace cell width and the textarea's inset, so overlays land on characters.
+  useEffect(() => {
+    const measure = (): void => {
+      const probe = measureRef.current;
+      const area = textareaRef.current;
+      if (probe === null || area === null) return;
+      setMetrics({
+        charWidth: probe.getBoundingClientRect().width / 20,
+        padLeft: parseFloat(getComputedStyle(area).paddingLeft) || 16,
+      });
+    };
+    measure();
+    void document.fonts.ready.then(measure);
+    window.addEventListener("resize", measure);
+    return () => { window.removeEventListener("resize", measure); };
+  }, []);
+
+  // Selecting a finding elsewhere brings its line into the editor's view.
+  useEffect(() => {
+    const area = textareaRef.current;
+    if (activeLine === null || area === null) return;
+    const top = PAD_PX + (activeLine - 1) * LINE_PX;
+    if (top < area.scrollTop + LINE_PX || top > area.scrollTop + area.clientHeight - LINE_PX * 2) {
+      area.scrollTo({ top: Math.max(0, top - area.clientHeight / 2), behavior: "smooth" });
+    }
+  }, [activeLine]);
+
+  const redactionBars = useMemo(() => {
+    if (!isRedacting) return [];
+    const seen = new Set<string>();
+    return [...findings]
+      .sort((a, b) => a.line - b.line || a.column - b.column)
+      .filter((finding) => {
+        const key = `${finding.line}:${finding.column}:${finding.match.length}`;
+        if (seen.has(key) || finding.match.length === 0) return false;
+        seen.add(key);
+        return true;
+      });
+  }, [isRedacting, findings]);
+
+  const startRedaction = useCallback(() => {
+    if (!canRedact || isRedacting) return;
+    setIsRedacting(true);
+  }, [canRedact, isRedacting]);
+
+  const finishRedaction = useCallback(() => {
+    setIsRedacting(false);
+    setSweep((value) => value + 1);
+    onRedact();
+  }, [onRedact]);
 
   const lines = useMemo(() => source.split("\n"), [source]);
   const lineSeverity = useMemo(() => severityByLine(findings), [findings]);
@@ -87,6 +166,7 @@ export function EditorPanel({
 
   const handleScroll = useCallback((event: UIEvent<HTMLTextAreaElement>) => {
     setScrollTop(event.currentTarget.scrollTop);
+    setScrollLeft(event.currentTarget.scrollLeft);
     if (gutterRef.current !== null) {
       gutterRef.current.scrollTop = event.currentTarget.scrollTop;
     }
@@ -108,11 +188,11 @@ export function EditorPanel({
           setError(`${file.name} looks binary; GuardEnv only scans text.`);
           return;
         }
-        onLoadSample(text, file.name);
+        loadDocument(text, file.name);
       };
       reader.readAsText(file);
     },
-    [onLoadSample],
+    [loadDocument],
   );
 
   const handleDrop = useCallback(
@@ -171,6 +251,17 @@ export function EditorPanel({
           {lines.length} L · {formatBytes(byteSize)}
         </span>
         <div className="ml-auto flex items-center gap-1.5">
+          <motion.button
+            type="button"
+            onClick={startRedaction}
+            disabled={!canRedact || isRedacting}
+            whileTap={{ scale: 0.95 }}
+            title="Black out every reported credential in this document"
+            className="hit group inline-flex items-center gap-1.5 rounded-md bg-ink px-2.5 py-1.5 text-[13px] font-semibold text-surface-1 shadow-rest transition-[background-color,opacity] duration-150 hover:bg-ink-soft disabled:cursor-not-allowed disabled:opacity-35"
+          >
+            <EyeOff className="h-3.5 w-3.5 shrink-0 text-mark transition-transform duration-200 group-hover:-rotate-12" aria-hidden />
+            Redact
+          </motion.button>
           <button type="button" onClick={() => inputRef.current?.click()} className={toolButton}>
             <Upload className="h-3.5 w-3.5 shrink-0" aria-hidden />
             Upload
@@ -198,7 +289,7 @@ export function EditorPanel({
               key={sample.id}
               type="button"
               title={sample.description}
-              onClick={() => { onLoadSample(sample.content, sample.filename); }}
+              onClick={() => { loadDocument(sample.content, sample.filename); }}
               whileTap={{ scale: 0.95 }}
               className={cx(
                 "relative h-10 shrink-0 rounded-md px-2 font-mono sm:h-8 sm:px-2.5 text-[13px] transition-colors",
@@ -231,6 +322,59 @@ export function EditorPanel({
           >
             <span className="block px-4 py-2.5">{error}</span>
           </motion.p>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence initial={false}>
+        {redaction !== null && (
+          <motion.div
+            key="redacted"
+            role="status"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease }}
+            className="overflow-hidden border-b border-ink bg-ink text-surface-1"
+          >
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 sm:px-4">
+              <motion.span
+                initial={{ scale: 0.6, rotate: -14 }}
+                animate={{ scale: 1, rotate: -4 }}
+                transition={{ ...softSpring, delay: 0.1 }}
+                className="rounded-[3px] border-2 border-mark px-1.5 py-0.5 font-display text-[12px] font-[850] uppercase tracking-[0.08em] text-mark [font-stretch:110%]"
+              >
+                Redacted
+              </motion.span>
+              <span className="min-w-[12rem] flex-1 text-[14px] leading-snug text-surface-1/85">
+                {redaction.count} {redaction.count === 1 ? "secret" : "secrets"} blacked out. This copy is safe to share.
+              </span>
+              <span className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => void copy(source)}
+                  className="hit inline-flex items-center gap-1.5 rounded-md bg-mark px-2.5 py-1 text-[13px] font-semibold text-ink transition-transform duration-150 active:scale-[0.96]"
+                >
+                  {copyState === "copied" ? (
+                    <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  ) : (
+                    <ClipboardCopy className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  )}
+                  {copyState === "copied" ? "Copied" : copyState === "error" ? "Copy failed" : "Copy"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSweep((value) => value + 1);
+                    onUndoRedaction();
+                  }}
+                  className="hit inline-flex items-center gap-1.5 rounded-md border border-surface-1/25 px-2.5 py-1 text-[13px] font-semibold text-surface-1 transition-[transform,border-color] duration-150 hover:border-surface-1/60 active:scale-[0.96]"
+                >
+                  <Undo2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  Undo
+                </button>
+              </span>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -302,10 +446,56 @@ export function EditorPanel({
             </div>
           </div>
 
+          {/* Redaction bars: they land on each secret, then the text becomes blocks. */}
+          {redactionBars.length > 0 && (
+            <div aria-hidden className="pointer-events-none absolute inset-0 z-[2] overflow-hidden">
+              {redactionBars.map((finding, index) => (
+                <motion.span
+                  key={`${finding.line}:${finding.column}`}
+                  className="absolute rounded-[2px] bg-ink"
+                  style={{
+                    top: PAD_PX + (finding.line - 1) * LINE_PX + 3 - scrollTop,
+                    left: metrics.padLeft + (finding.column - 1) * metrics.charWidth - scrollLeft - 1,
+                    width: finding.match.length * metrics.charWidth + 2,
+                    height: LINE_PX - 6,
+                  }}
+                  initial={{ clipPath: "inset(0 100% 0 0)" }}
+                  animate={{ clipPath: "inset(0 0% 0 0)" }}
+                  transition={{ duration: 0.38, delay: index * 0.09, ease }}
+                  onAnimationComplete={() => { if (index === redactionBars.length - 1) finishRedaction(); }}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Scan sweep: a highlighter edge passes down the page once per document. */}
+          <div aria-hidden className="pointer-events-none absolute inset-0 z-[1] overflow-hidden">
+            <motion.div
+              key={`sweep-${sweep}`}
+              className="h-full w-full"
+              initial={{ y: "-100%", opacity: 1 }}
+              animate={{ y: "0%", opacity: [1, 1, 0] }}
+              transition={{ duration: 1.1, delay: sweep === 0 ? 0.5 : 0, ease: [0.45, 0, 0.2, 1], opacity: { times: [0, 0.8, 1], duration: 1.1, delay: sweep === 0 ? 0.5 : 0 } }}
+              style={{
+                background:
+                  "linear-gradient(to bottom, transparent calc(100% - 72px), rgb(227 242 74 / 0.35) calc(100% - 4px), #101317 calc(100% - 2px), #101317 100%)",
+              }}
+            />
+          </div>
+
+          <span
+            ref={measureRef}
+            aria-hidden
+            className="invisible absolute left-0 top-0 whitespace-pre font-mono text-[13px]"
+          >
+            {"0".repeat(20)}
+          </span>
+
           <label className="sr-only" htmlFor="guardenv-source">
             Source to scan
           </label>
           <textarea
+            ref={textareaRef}
             id="guardenv-source"
             value={source}
             onChange={(event) => { onSourceChange(event.target.value); }}
